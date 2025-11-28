@@ -1,0 +1,417 @@
+/* ═══════════════════════════════════════════════════════════════
+   📅 DATE PICKER — Bootstrap Theme Compatible
+   ═══════════════════════════════════════════════════════════════ */
+
+/* ─────────────────────────────────────────────────────────────────
+   📦 Wrapper Container
+   ───────────────────────────────────────────────────────────────── */
+.date-picker-wrapper {
+  font-family: var(--bs-font-sans-serif, 'Vazirmatn', system-ui, sans-serif);
+  direction: rtl;
+}
+
+.date-picker-wrapper.has-error .date-picker-input-group {
+  border-color: var(--bs-danger, #dc3545);
+}
+
+.date-picker-wrapper.has-error .date-picker-input-group:focus-within {
+  box-shadow: 0 0 0 0.25rem rgba(220, 53, 69, 0.25);
+}
+
+.date-picker-wrapper.has-error .date-picker-icon {
+  color: var(--bs-danger, #dc3545);
+}
+
+.date-picker-wrapper.is-disabled {
+  opacity: 0.65;
+  pointer-events: none;
+}
+
+.date-picker-wrapper.is-disabled .date-picker-input-group {
+  background: var(--bs-tertiary-bg, #f8f9fa);
+  cursor: not-allowed;
+}
+
+/* ─────────────────────────────────────────────────────────────────
+   🏷️ Label
+   ───────────────────────────────────────────────────────────────── */
+.date-picker-label {
+  display: block;
+  margin-bottom: 0.5rem;
+  font-size: 0.875rem;
+  font-weight: 500;
+  color: var(--bs-body-color);
+}
+
+/* ─────────────────────────────────────────────────────────────────
+   📥 Input Group
+   ───────────────────────────────────────────────────────────────── */
+.date-picker-input-group {
+  position: relative;
+  display: flex;
+  align-items: center;
+  background: var(--bs-input-bg, #fff);
+  border: 1px solid var(--bs-border-color, #dee2e6);
+  border-radius: var(--bs-border-radius, 0.375rem);
+  transition: border-color 0.15s ease-in-out, box-shadow 0.15s ease-in-out;
+  overflow: hidden;
+}
+
+.date-picker-input-group:hover {
+  border-color: var(--bs-border-color, #dee2e6);
+}
+
+.date-picker-input-group:focus-within {
+  border-color: var(--bs-primary, #0d6efd);
+  box-shadow: 0 0 0 0.25rem rgba(13, 110, 253, 0.25);
+}
+
+/* ─────────────────────────────────────────────────────────────────
+   📅 Icon
+   ───────────────────────────────────────────────────────────────── */
+.date-picker-icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 40px;
+  height: 38px;
+  background: var(--bs-tertiary-bg, #f8f9fa);
+  border-left: 1px solid var(--bs-border-color, #dee2e6);
+  color: var(--bs-secondary-color, #6c757d);
+  flex-shrink: 0;
+
+  i {
+    font-size: 16px;
+  }
+}
+
+/* ─────────────────────────────────────────────────────────────────
+   📝 Input Field
+   ───────────────────────────────────────────────────────────────── */
+.date-picker-container {
+  flex: 1;
+  width: 100% !important;
+}
+
+.date-picker-input {
+  width: 100% !important;
+  height: 38px !important;
+  padding: 0.375rem 0.75rem !important;
+  padding-left: 2rem !important;
+  font-family: inherit !important;
+  font-size: 0.875rem !important;
+  color: var(--bs-body-color) !important;
+  background: transparent !important;
+  border: none !important;
+  outline: none !important;
+  box-shadow: none !important;
+  text-align: right;
+
+  &::placeholder {
+    color: var(--bs-secondary-color, #6c757d);
+  }
+
+  &:disabled {
+    cursor: not-allowed;
+  }
+}
+
+/* ─────────────────────────────────────────────────────────────────
+   ❌ Clear Button
+   ───────────────────────────────────────────────────────────────── */
+.date-picker-clear {
+  position: absolute;
+  left: 8px;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 22px;
+  height: 22px;
+  padding: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--bs-light, #f8f9fa);
+  border: none;
+  border-radius: 50%;
+  color: var(--bs-secondary-color, #6c757d);
+  cursor: pointer;
+  transition: all 0.15s ease-in-out;
+
+  i {
+    font-size: 14px;
+  }
+
+  &:hover {
+    background: rgba(220, 53, 69, 0.1);
+    color: var(--bs-danger, #dc3545);
+  }
+}
+
+/* ─────────────────────────────────────────────────────────────────
+   ⚠️ Error Message
+   ───────────────────────────────────────────────────────────────── */
+.date-picker-error {
+  display: block;
+  margin-top: 0.25rem;
+  font-size: 0.75rem;
+  color: var(--bs-danger, #dc3545);
+}
+
+/* ═══════════════════════════════════════════════════════════════
+   📅 CALENDAR POPUP STYLES (react-multi-date-picker)
+   ═══════════════════════════════════════════════════════════════ */
+.rmdp-wrapper {
+  font-family: var(--bs-font-sans-serif, 'Vazirmatn', system-ui, sans-serif) !important;
+  direction: rtl;
+}
+
+.rmdp-container {
+  width: 100% !important;
+}
+
+/* Calendar Box */
+.rmdp-calendar {
+  background: var(--bs-dropdown-bg, #fff);
+  border-radius: var(--bs-border-radius, 0.375rem) !important;
+  box-shadow: var(--bs-box-shadow, 0 0.5rem 1rem rgba(0, 0, 0, 0.15)) !important;
+  border: 1px solid var(--bs-border-color, #dee2e6) !important;
+  padding: 8px !important;
+  z-index: 999 !important;
+}
+
+/* Header (Month/Year Navigation) */
+.rmdp-header {
+  padding: 8px 4px !important;
+  margin-bottom: 4px;
+  border-bottom: 1px solid var(--bs-border-color, #dee2e6);
+
+  .rmdp-header-values {
+    font-size: 0.9375rem !important;
+    font-weight: 500 !important;
+    color: var(--bs-body-color) !important;
+  }
+}
+
+/* Navigation Arrows */
+.rmdp-arrow-container {
+  width: 28px !important;
+  height: 28px !important;
+  display: flex !important;
+  align-items: center;
+  justify-content: center;
+  background: transparent !important;
+  border-radius: var(--bs-border-radius-sm, 0.25rem) !important;
+  transition: background 0.15s ease-in-out;
+
+  &:hover {
+    background: var(--bs-light, #f8f9fa) !important;
+  }
+}
+
+.rmdp-arrow {
+  border-color: var(--bs-secondary-color, #6c757d) !important;
+  margin: 0 !important;
+  padding: 3px !important;
+}
+
+.rmdp-left .rmdp-arrow {
+  margin-right: 2px !important;
+}
+
+.rmdp-right .rmdp-arrow {
+  margin-left: 2px !important;
+}
+
+/* Week Days Header */
+.rmdp-week-day {
+  width: 36px !important;
+  height: 32px !important;
+  font-size: 0.75rem !important;
+  font-weight: 500 !important;
+  color: var(--bs-secondary-color, #6c757d) !important;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+/* Day Cells */
+.rmdp-day {
+  width: 36px !important;
+  height: 36px !important;
+
+  span {
+    font-size: 0.8125rem !important;
+    font-weight: 400 !important;
+    color: var(--bs-body-color) !important;
+    width: 32px !important;
+    height: 32px !important;
+    border-radius: var(--bs-border-radius-sm, 0.25rem) !important;
+    display: flex !important;
+    align-items: center;
+    justify-content: center;
+    transition: all 0.15s ease-in-out !important;
+  }
+
+  &:not(.rmdp-disabled):not(.rmdp-day-hidden) span:hover {
+    background: var(--bs-light, #f8f9fa) !important;
+    color: var(--bs-body-color) !important;
+  }
+}
+
+/* Today */
+.rmdp-today span {
+  background: var(--bs-primary, #0d6efd) !important;
+  color: #fff !important;
+  font-weight: 500 !important;
+}
+
+/* Selected Day */
+.rmdp-selected span {
+  background: var(--bs-primary, #0d6efd) !important;
+  color: #fff !important;
+  font-weight: 500 !important;
+  box-shadow: none !important;
+}
+
+.rmdp-selected:not(.rmdp-disabled) span:hover {
+  background: var(--bs-primary, #0d6efd) !important;
+  color: #fff !important;
+}
+
+/* Disabled Days */
+.rmdp-disabled span {
+  color: var(--bs-gray-500, #adb5bd) !important;
+  opacity: 0.6 !important;
+  cursor: not-allowed !important;
+}
+
+/* Other Month Days */
+.rmdp-deactive span {
+  color: var(--bs-gray-500, #adb5bd) !important;
+  opacity: 0.6 !important;
+}
+
+/* Friday (Weekend) - Last day in Persian week */
+.rmdp-week .rmdp-day:last-child span {
+  color: var(--bs-danger, #dc3545) !important;
+}
+
+.rmdp-week .rmdp-day:last-child.rmdp-selected span,
+.rmdp-week .rmdp-day:last-child.rmdp-today span {
+  color: #fff !important;
+}
+
+
+
+.rmdp-week .rmdp-day:first-child.rmdp-selected span,
+.rmdp-week .rmdp-day:first-child.rmdp-today span {
+  color: #fff !important;
+}
+
+/* Month/Year Picker */
+.rmdp-month-picker,
+.rmdp-year-picker {
+  background: var(--bs-dropdown-bg, #fff) !important;
+  border-radius: var(--bs-border-radius-sm, 0.25rem) !important;
+
+  .rmdp-day span {
+    font-size: 0.75rem !important;
+    border-radius: var(--bs-border-radius-sm, 0.25rem) !important;
+  }
+}
+
+/* Range Between */
+.rmdp-range {
+  background: var(--bs-tertiary-bg, #f8f9fa) !important;
+  box-shadow: none !important;
+
+  span {
+    color: var(--bs-body-color) !important;
+  }
+
+  &.start span,
+  &.end span {
+    background: var(--bs-primary, #0d6efd) !important;
+    color: #fff !important;
+  }
+}
+
+/* ─────────────────────────────────────────────────────────────────
+   📱 Responsive
+   ───────────────────────────────────────────────────────────────── */
+@media (max-width: 576px) {
+  .rmdp-calendar {
+    min-width: 260px;
+  }
+
+  .rmdp-day {
+    width: 32px !important;
+    height: 32px !important;
+
+    span {
+      width: 28px !important;
+      height: 28px !important;
+      font-size: 0.75rem !important;
+    }
+  }
+
+  .rmdp-week-day {
+    width: 32px !important;
+    font-size: 0.6875rem !important;
+  }
+}
+
+/* ─────────────────────────────────────────────────────────────────
+   🎨 Size Variants
+   ───────────────────────────────────────────────────────────────── */
+/* Small */
+.date-picker-wrapper.size-sm {
+  .date-picker-icon {
+    width: 34px;
+    height: 32px;
+
+    i {
+      font-size: 14px;
+    }
+  }
+
+  .date-picker-input {
+    height: 32px !important;
+    font-size: 0.8125rem !important;
+  }
+
+  .date-picker-clear {
+    width: 18px;
+    height: 18px;
+
+    i {
+      font-size: 12px;
+    }
+  }
+}
+
+/* Large */
+.date-picker-wrapper.size-lg {
+  .date-picker-icon {
+    width: 46px;
+    height: 44px;
+
+    i {
+      font-size: 18px;
+    }
+  }
+
+  .date-picker-input {
+    height: 44px !important;
+    font-size: 1rem !important;
+  }
+
+  .date-picker-clear {
+    width: 26px;
+    height: 26px;
+
+    i {
+      font-size: 16px;
+    }
+  }
+}

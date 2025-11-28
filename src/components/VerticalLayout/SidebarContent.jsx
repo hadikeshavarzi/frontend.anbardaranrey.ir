@@ -1,0 +1,299 @@
+import PropTypes from "prop-types";
+import React, { useEffect, useRef, useCallback } from "react";
+
+// Scrollbar
+import SimpleBar from "simplebar-react";
+
+// MetisMenu
+import MetisMenu from "metismenujs";
+
+// Router
+import { Link, useLocation } from "react-router-dom";
+
+// i18n
+import { withTranslation } from "react-i18next";
+import withRouter from "../Common/withRouter";
+
+const SidebarContent = (props) => {
+  const ref = useRef();
+  const path = useLocation();
+
+  const activateParentDropdown = useCallback((item) => {
+    item.classList.add("active");
+    const parent = item.parentElement;
+    const parent2El = parent.childNodes[1];
+
+    if (parent2El && parent2El.id !== "side-menu") {
+      parent2El.classList.add("mm-show");
+    }
+
+    if (parent) {
+      parent.classList.add("mm-active");
+      const parent2 = parent.parentElement;
+
+      if (parent2) {
+        parent2.classList.add("mm-show");
+        const parent3 = parent2.parentElement;
+
+        if (parent3) {
+          parent3.classList.add("mm-active");
+          parent3.childNodes[0].classList.add("mm-active");
+          const parent4 = parent3.parentElement;
+          if (parent4) {
+            parent4.classList.add("mm-show");
+            const parent5 = parent4.parentElement;
+            if (parent5) {
+              parent5.classList.add("mm-show");
+              parent5.childNodes[0].classList.add("mm-active");
+            }
+          }
+        }
+      }
+      scrollElement(item);
+      return false;
+    }
+    scrollElement(item);
+    return false;
+  }, []);
+
+  const removeActivation = (items) => {
+    for (let i = 0; i < items.length; ++i) {
+      const item = items[i];
+      const parent = item.parentElement;
+
+      if (item?.classList.contains("active")) {
+        item.classList.remove("active");
+      }
+      if (parent) {
+        const parent2El =
+            parent.childNodes?.length && parent.childNodes[1]
+                ? parent.childNodes[1]
+                : null;
+
+        if (parent2El && parent2El.id !== "side-menu") {
+          parent2El.classList.remove("mm-show");
+        }
+
+        parent.classList.remove("mm-active");
+        const parent2 = parent.parentElement;
+
+        if (parent2) {
+          parent2.classList.remove("mm-show");
+          const parent3 = parent2.parentElement;
+
+          if (parent3) {
+            parent3.classList.remove("mm-active");
+            parent3.childNodes[0].classList.remove("mm-active");
+            const parent4 = parent3.parentElement;
+
+            if (parent4) {
+              parent4.classList.remove("mm-show");
+              const parent5 = parent4.parentElement;
+
+              if (parent5) {
+                parent5.classList.remove("mm-show");
+                parent5.childNodes[0].classList.remove("mm-active");
+              }
+            }
+          }
+        }
+      }
+    }
+  };
+
+  const activeMenu = useCallback(() => {
+    const pathName = path.pathname;
+    let matchingMenuItem = null;
+
+    const ul = document.getElementById("side-menu");
+    const items = ul.getElementsByTagName("a");
+
+    removeActivation(items);
+
+    for (let i = 0; i < items.length; i++) {
+      if (pathName === items[i].pathname) {
+        matchingMenuItem = items[i];
+        break;
+      }
+    }
+
+    if (matchingMenuItem) activateParentDropdown(matchingMenuItem);
+  }, [path.pathname, activateParentDropdown]);
+
+  useEffect(() => {
+    ref.current.recalculate();
+  }, []);
+
+  useEffect(() => {
+    new MetisMenu("#side-menu");
+    activeMenu();
+  }, []);
+
+  useEffect(() => {
+    activeMenu();
+  }, [activeMenu]);
+
+  function scrollElement(item) {
+    if (item) {
+      const currentPosition = item.offsetTop;
+      if (currentPosition > window.innerHeight) {
+        ref.current.getScrollElement().scrollTop = currentPosition - 300;
+      }
+    }
+  }
+
+  return (
+      <React.Fragment>
+        <SimpleBar className="h-100" ref={ref}>
+          <div id="sidebar-menu">
+            <ul className="metismenu list-unstyled" id="side-menu">
+
+              {/* داشبورد */}
+              <li className="menu-title">داشبورد</li>
+
+              <li>
+                <Link to="/dashboard">
+                  <i className="bx bx-home-circle"></i>
+                  <span>صفحه اصلی</span>
+                </Link>
+              </li>
+
+              {/* مدیریت اعضا */}
+              <li className="menu-title">مدیریت اعضا</li>
+
+              <li>
+                <Link to="/#" className="has-arrow">
+                  <i className="bx bx-user"></i>
+                  <span>اعضا</span>
+                </Link>
+                <ul className="sub-menu">
+                  <li>
+                    <Link to="/members/list">لیست اعضا</Link>
+                  </li>
+                  <li>
+                    <Link to="/members/add">افزودن عضو</Link>
+                  </li>
+                </ul>
+              </li>
+
+              {/* انبارداری */}
+              <li className="menu-title">انبارداری</li>
+              {/* مدیریت مشتریان */}
+              <li>
+                <Link to="/#" className="has-arrow">
+                  <i className="bx bx-id-card"></i>
+                  <span>مشتریان</span>
+                </Link>
+                <ul className="sub-menu">
+                  <li>
+                    <Link to="/customers">لیست مشتریان</Link>
+                  </li>
+                  <li>
+                    <Link to="/customers/add">افزودن مشتری</Link>
+                  </li>
+                </ul>
+              </li>
+
+              {/* واحدهای کالا */}
+              <li>
+                <Link to="/#" className="has-arrow">
+                  <i className="bx bx-layer"></i>
+                  <span>واحدهای کالا</span>
+                </Link>
+                <ul className="sub-menu">
+                  <li>
+                    <Link to="/inventory/unit-list">لیست واحدها</Link>
+                  </li>
+                  <li>
+                    <Link to="/inventory/add-unit">افزودن واحد</Link>
+                  </li>
+                </ul>
+              </li>
+
+              {/* دسته‌بندی‌ها */}
+              <li>
+                <Link to="/#" className="has-arrow">
+                  <i className="bx bx-category"></i>
+                  <span>دسته‌بندی‌ها</span>
+                </Link>
+                <ul className="sub-menu">
+                  <li>
+                    <Link to="/inventory/category-list">لیست دسته‌ها</Link>
+                  </li>
+                  <li>
+                    <Link to="/inventory/add-category">افزودن دسته</Link>
+                  </li>
+                </ul>
+              </li>
+
+              {/* کالاها */}
+              <li>
+                <Link to="/#" className="has-arrow">
+                  <i className="bx bx-package"></i>
+                  <span>کالاها</span>
+                </Link>
+                <ul className="sub-menu">
+                  <li>
+                    <Link to="/inventory/product-list">لیست کالاها</Link>
+                  </li>
+                  <li>
+                    <Link to="/inventory/add-product">افزودن کالا</Link>
+                  </li>
+                </ul>
+              </li>
+
+              {/* رسید کالا — اینو اضافه کردم */}
+              <li>
+                <Link to="/#" className="has-arrow">
+                  <i className="bx bx-receipt"></i>
+                  <span>رسید کالا</span>
+                </Link>
+                <ul className="sub-menu">
+                  <li>
+                    <Link to="/receipt/list">لیست رسیدها</Link>
+                  </li>
+                  <li>
+                    <Link to="/receipt/form">ثبت رسید جدید</Link>
+                  </li>
+                </ul>
+              </li>
+
+              {/* گزارشات */}
+              <li className="menu-title">گزارشات</li>
+
+              <li>
+                <Link to="/reports/stock-report">
+                  <i className="bx bx-bar-chart-alt-2"></i>
+                  <span>گزارش موجودی</span>
+                </Link>
+              </li>
+
+              {/* تنظیمات */}
+              <li className="menu-title">تنظیمات</li>
+
+              <li>
+                <Link to="/settings">
+                  <i className="bx bx-cog"></i>
+                  <span>تنظیمات سیستم</span>
+                </Link>
+              </li>
+
+              <li>
+                <Link to="/profile">
+                  <i className="bx bx-user-circle"></i>
+                  <span>پروفایل</span>
+                </Link>
+              </li>
+            </ul>
+          </div>
+        </SimpleBar>
+      </React.Fragment>
+  );
+};
+
+SidebarContent.propTypes = {
+  location: PropTypes.object,
+  t: PropTypes.any,
+};
+
+export default withRouter(withTranslation()(SidebarContent));

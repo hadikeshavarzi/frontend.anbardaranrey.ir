@@ -1,0 +1,385 @@
+/* ═══════════════════════════════════════════════════════════════
+   💰 RECEIPT COSTS CARD — Industrial Modern Theme
+   ═══════════════════════════════════════════════════════════════ */
+
+.receipt-costs-card {
+  font-family: 'Vazirmatn', system-ui, sans-serif;
+  background: #ffffff;
+  border: 1px solid #e2e8f0;
+  border-radius: 12px;
+  padding: 0;
+  box-shadow: 0 4px 6px -1px rgba(15, 23, 42, 0.08),
+  0 2px 4px -2px rgba(15, 23, 42, 0.04);
+  position: relative;
+  z-index: 1;
+  overflow: hidden;
+  animation: fadeInUp 0.4s ease-out;
+  margin-top: 1rem;
+
+  &::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    height: 3px;
+    background: linear-gradient(
+                    90deg,
+                    #059669 0%,
+                    #ea580c 50%,
+                    #059669 100%
+    );
+  }
+}
+
+/* ─────────────────────────────────────────────────────────────────
+   Header
+   ───────────────────────────────────────────────────────────────── */
+.costs-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 1rem 1.25rem;
+  background: linear-gradient(135deg, #f8fafc 0%, #ffffff 100%);
+  border-bottom: 1px solid #e2e8f0;
+}
+
+.costs-title {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-size: 0.8125rem;
+  font-weight: 600;
+  color: #1e293b;
+
+  i {
+    font-size: 1.25rem;
+    color: #ea580c;
+  }
+}
+
+.costs-total {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.5rem 1rem;
+  background: linear-gradient(135deg, #d1fae5 0%, #ecfdf5 100%);
+  border-radius: 8px;
+  border: 1px solid #a7f3d0;
+
+  .total-label {
+    font-size: 0.75rem;
+    color: #475569;
+  }
+
+  .total-value {
+    font-size: 0.875rem;
+    font-weight: 700;
+    color: #059669;
+    font-variant-numeric: tabular-nums;
+  }
+
+  .total-unit {
+    font-size: 0.6875rem;
+    color: #64748b;
+  }
+}
+
+/* ─────────────────────────────────────────────────────────────────
+   Grid Layout
+   ───────────────────────────────────────────────────────────────── */
+.costs-grid {
+  padding: 1rem 1.25rem;
+  margin: 0 !important;
+  row-gap: 1rem;
+}
+
+/* ─────────────────────────────────────────────────────────────────
+   Cost Item Card
+   ───────────────────────────────────────────────────────────────── */
+.cost-item {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.75rem;
+  padding: 0.75rem;
+  background: #f8fafc;
+  border-radius: 8px;
+  border: 1px solid #e2e8f0;
+  transition: all 200ms cubic-bezier(0.4, 0, 0.2, 1);
+  height: 100%;
+
+  &:hover {
+    border-color: #cbd5e1;
+    box-shadow: 0 1px 2px rgba(15, 23, 42, 0.05);
+    transform: translateY(-2px);
+  }
+
+  &:focus-within {
+    border-color: #ea580c;
+    box-shadow: 0 0 0 3px rgba(234, 88, 12, 0.1);
+  }
+}
+
+/* ─────────────────────────────────────────────────────────────────
+   Cost Icons
+   ───────────────────────────────────────────────────────────────── */
+.cost-icon {
+  width: 40px;
+  height: 40px;
+  border-radius: 6px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+
+  i {
+    font-size: 1.25rem;
+  }
+
+  // بارگیری - آبی
+  &.loading {
+    background: linear-gradient(135deg, #dbeafe 0%, #eff6ff 100%);
+    color: #2563eb;
+    border: 1px solid #bfdbfe;
+  }
+
+  // تخلیه - صورتی
+  &.unloading {
+    background: linear-gradient(135deg, #fce7f3 0%, #fdf2f8 100%);
+    color: #db2777;
+    border: 1px solid #fbcfe8;
+  }
+
+  // انبارداری - نارنجی
+  &.warehouse {
+    background: linear-gradient(135deg, #fed7aa 0%, #fff7ed 100%);
+    color: #ea580c;
+    border: 1px solid #fed7aa;
+  }
+
+  // مالیات - زرد
+  &.tax {
+    background: linear-gradient(135deg, #fef3c7 0%, #fffbeb 100%);
+    color: #d97706;
+    border: 1px solid #fde68a;
+  }
+
+  // پس‌کرایه - بنفش
+  &.return-freight {
+    background: linear-gradient(135deg, #ede9fe 0%, #f5f3ff 100%);
+    color: #7c3aed;
+    border: 1px solid #ddd6fe;
+  }
+
+  // بارچینی - سبز تیره
+  &.loading-fee {
+    background: linear-gradient(135deg, #d1fae5 0%, #ecfdf5 100%);
+    color: #059669;
+    border: 1px solid #a7f3d0;
+  }
+
+  // متفرقه - خاکستری
+  &.misc {
+    background: linear-gradient(135deg, #e2e8f0 0%, #f1f5f9 100%);
+    color: #475569;
+    border: 1px solid #cbd5e1;
+  }
+}
+
+/* ─────────────────────────────────────────────────────────────────
+   Misc Description Section
+   ───────────────────────────────────────────────────────────────── */
+.misc-description-wrapper {
+  padding: 0 1.25rem 1rem;
+  animation: fadeInUp 0.3s ease-out;
+}
+
+.misc-description-item {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.75rem;
+  padding: 1rem;
+  background: linear-gradient(135deg, #fef3c7 0%, #fffbeb 100%);
+  border-radius: 8px;
+  border: 1px solid #fde68a;
+}
+
+.misc-desc-icon {
+  width: 40px;
+  height: 40px;
+  border-radius: 6px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  background: linear-gradient(135deg, #fbbf24 0%, #f59e0b 100%);
+  color: white;
+
+  i {
+    font-size: 1.25rem;
+  }
+}
+
+.misc-desc-content {
+  flex: 1;
+  min-width: 0;
+}
+
+.misc-desc-label {
+  display: block;
+  font-size: 0.6875rem;
+  font-weight: 600;
+  color: #92400e;
+  margin-bottom: 0.5rem;
+  text-transform: uppercase;
+  letter-spacing: 0.02em;
+}
+
+.misc-desc-input {
+  width: 100%;
+  padding: 0.75rem !important;
+  font-size: 0.75rem !important;
+  font-family: 'Vazirmatn', system-ui, sans-serif;
+  background: #ffffff;
+  border: 1px solid #fde68a !important;
+  border-radius: 6px !important;
+  resize: none;
+  transition: all 150ms cubic-bezier(0.4, 0, 0.2, 1);
+
+  &::placeholder {
+    color: #d97706;
+    opacity: 0.6;
+  }
+
+  &:focus {
+    border-color: #f59e0b !important;
+    box-shadow: 0 0 0 3px rgba(245, 158, 11, 0.15) !important;
+    outline: none;
+  }
+}
+
+/* ─────────────────────────────────────────────────────────────────
+   Cost Content
+   ───────────────────────────────────────────────────────────────── */
+.cost-content {
+  flex: 1;
+  min-width: 0;
+}
+
+.cost-label {
+  display: block;
+  font-size: 0.6875rem;
+  font-weight: 500;
+  color: #64748b;
+  margin-bottom: 0.25rem;
+  text-transform: uppercase;
+  letter-spacing: 0.02em;
+}
+
+.cost-input-wrapper {
+  position: relative;
+  display: flex;
+  align-items: center;
+}
+
+.cost-input {
+  flex: 1;
+  height: 36px !important;
+  padding: 0.5rem 0.75rem !important;
+  padding-left: 40px !important;
+  font-size: 0.75rem !important;
+  font-family: 'Vazirmatn', system-ui, sans-serif;
+  font-weight: 500;
+  font-variant-numeric: tabular-nums;
+  background: #ffffff;
+  border: 1px solid #e2e8f0 !important;
+  border-radius: 6px !important;
+  text-align: left;
+  direction: ltr;
+  transition: all 150ms cubic-bezier(0.4, 0, 0.2, 1);
+
+  &::placeholder {
+    color: #cbd5e1;
+  }
+
+  &:focus {
+    border-color: #ea580c !important;
+    box-shadow: none !important;
+    background: white;
+    outline: none;
+  }
+
+  // حذف فلش‌های number input
+  -moz-appearance: textfield;
+  appearance: textfield;
+
+  &::-webkit-outer-spin-button,
+  &::-webkit-inner-spin-button {
+    -webkit-appearance: none;
+    margin: 0;
+  }
+}
+
+.cost-unit {
+  position: absolute;
+  left: 10px;
+  top: 50%;
+  transform: translateY(-50%);
+  font-size: 0.6875rem;
+  color: #94a3b8;
+  pointer-events: none;
+}
+
+/* ─────────────────────────────────────────────────────────────────
+   Animation
+   ───────────────────────────────────────────────────────────────── */
+@keyframes fadeInUp {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* ─────────────────────────────────────────────────────────────────
+   Responsive
+   ───────────────────────────────────────────────────────────────── */
+@media (max-width: 768px) {
+  .costs-header {
+    flex-direction: column;
+    gap: 0.75rem;
+    text-align: center;
+  }
+
+  .costs-grid {
+    padding: 0.75rem;
+  }
+
+  .cost-item {
+    margin-bottom: 0.75rem;
+  }
+
+  .costs-total {
+    width: 100%;
+    justify-content: center;
+  }
+}
+
+@media (max-width: 576px) {
+  .cost-item {
+    flex-direction: column;
+    align-items: center;
+    text-align: center;
+  }
+
+  .cost-content {
+    width: 100%;
+  }
+
+  .cost-label {
+    text-align: center;
+  }
+}
