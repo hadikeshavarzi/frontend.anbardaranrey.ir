@@ -29,6 +29,8 @@ import EditCustomer from "../pages/Customers/EditCustomer";
 
 /* Receipt */
 import ReceiptForm from "../pages/Receipt/ReceiptForm";
+import ReceiptsList from "../pages/Receipt/ReceiptsList";
+import ReceiptView from "../pages/Receipt/ReceiptView";
 
 /* Auth */
 import Login from "../pages/Authentication/Login";
@@ -69,8 +71,10 @@ const authProtectedRoutes = [
   { path: "/inventory/add-product", component: <AddProduct /> },
   { path: "/inventory/edit-product/:id", component: <EditProduct /> },
 
-  /* ---------- Receipt Form ---------- */
+  /* ---------- Receipt ---------- */
   { path: "/receipt/form", component: <ReceiptForm /> },
+  { path: "/receipt/list", component: <ReceiptsList /> },
+  { path: "/receipts/view/:id", component: <ReceiptView /> },  
 
   /* Default */
   { path: "/", exact: true, component: <Navigate to="/dashboard" /> },

@@ -1,13 +1,8 @@
 /* =====================================================================================
-   📌 API Helper – Stable Version (WORKING)
-   ✔ OTP بدون مشکل
-   ✔ CRUD صحیح
-   ✔ Authorization صحیح
-   ✔ بدون خطای "ارتباط با سرور برقرار نشد"
+   📌 API Helper – Fixed Version
 ===================================================================================== */
 
 import axios from "axios";
-import accessToken from "./jwt-token-access/accessToken";
 
 /* ------------------------------------------------------------------
    🔗 Base URL – شامل /api
@@ -22,19 +17,40 @@ const axiosApi = axios.create({
 });
 
 /* ------------------------------------------------------------------
-   🟦 Authorization Header
+   🟦 Request Interceptor - برای ست کردن token در هر request
 ------------------------------------------------------------------ */
-const token = accessToken;
-if (token) {
-  axiosApi.defaults.headers.common["Authorization"] = token;
-}
+axiosApi.interceptors.request.use(
+  (config) => {
+    // ✅ هربار که request میفرستی، token رو از localStorage میگیره
+    const token = localStorage.getItem("authToken");
+    
+    if (token) {
+      config.headers["Authorization"] = `Bearer ${token}`;
+    }
+    
+    console.log("📤 Request:", config.method?.toUpperCase(), config.url);
+    console.log("🔑 Token:", token ? "✅ موجود" : "❌ ندارد");
+    
+    return config;
+  },
+  (error) => {
+    return Promise.reject(error);
+  }
+);
 
 /* ------------------------------------------------------------------
-   🟦 Error Interceptor
+   🟦 Response Interceptor
 ------------------------------------------------------------------ */
 axiosApi.interceptors.response.use(
-    (response) => response,
-    (error) => Promise.reject(error)
+  (response) => {
+    console.log("✅ Response:", response.status, response.config.url);
+    return response;
+  },
+  (error) => {
+    console.error("❌ Response Error:", error.response?.status, error.config?.url);
+    console.error("📋 Error Data:", error.response?.data);
+    return Promise.reject(error);
+  }
 );
 
 /* =====================================================================================
@@ -74,9 +90,9 @@ export async function requestOtp(mobile) {
   } catch (error) {
     if (error.response) {
       throw (
-          error.response.data?.error ||
-          error.response.data?.message ||
-          `خطای سرور: ${error.response.status}`
+        error.response.data?.error ||
+        error.response.data?.message ||
+        `خطای سرور: ${error.response.status}`
       );
     }
     throw "ارتباط با سرور برقرار نشد";
@@ -89,13 +105,20 @@ export async function verifyOtp(mobile, otp) {
       mobile,
       otp,
     });
+    
+    // ✅ ذخیره token در localStorage
+    if (res.data?.token) {
+      localStorage.setItem("authToken", res.data.token);
+      console.log("✅ Token ذخیره شد:", res.data.token.substring(0, 20) + "...");
+    }
+    
     return res.data;
   } catch (error) {
     if (error.response) {
       throw (
-          error.response.data?.error ||
-          error.response.data?.message ||
-          `خطای سرور: ${error.response.status}`
+        error.response.data?.error ||
+        error.response.data?.message ||
+        `خطای سرور: ${error.response.status}`
       );
     }
     throw "ارتباط با سرور برقرار نشد";
@@ -118,9 +141,9 @@ export async function getMemberById(memberId, authToken) {
   } catch (error) {
     if (error.response) {
       throw (
-          error.response.data?.error ||
-          error.response.data?.message ||
-          `خطای سرور: ${error.response.status}`
+        error.response.data?.error ||
+        error.response.data?.message ||
+        `خطای سرور: ${error.response.status}`
       );
     }
     throw "ارتباط با سرور برقرار نشد";
