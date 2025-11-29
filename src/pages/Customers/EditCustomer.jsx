@@ -3,11 +3,16 @@ import {
     Container, Row, Col, Card, CardBody, Form, Input, Label, Button, Spinner, Alert, FormFeedback
 } from "reactstrap";
 import { useFormik } from "formik";
-import * as Yup from "yup";
 import { useParams, useNavigate } from "react-router-dom";
 import { get, patch } from "../../helpers/api_helper.jsx";
 import DatePickerWithIcon from "../../components/Receipt/DatePickerWithIcon";
 import moment from "moment-jalaali";
+import { DateObject } from "react-multi-date-picker";
+import persian from "react-date-object/calendars/persian";
+import persian_fa from "react-date-object/locales/persian_fa";
+
+// ✅ فقط این یک خط را اضافه کن
+import { customerValidationSchema } from "../../utils/validationSchemas";
 
 const EditCustomer = () => {
     const { id } = useParams();
@@ -25,19 +30,15 @@ const EditCustomer = () => {
             nationalId: "",
             mobile: "",
             phone: "",
-            birthOrRegisterDate: "", 
+            birthOrRegisterDate: null,
             postalCode: "",
             economicCode: "",
             address: "",
             description: "",
         },
-        validationSchema: Yup.object({
-            customerType: Yup.string().required(),
-            name: Yup.string().required("نام مشتری الزامی است"),
-            nationalId: Yup.string(),
-            mobile: Yup.string(),
-            birthOrRegisterDate: Yup.string().nullable(),
-        }),
+        // ✅ این قسمت را حذف کن و جایگزین کن
+        validationSchema: customerValidationSchema,
+        
         onSubmit: async (values) => {
             setSaving(true);
             setError("");
@@ -53,46 +54,19 @@ const EditCustomer = () => {
                     }
                 });
 
-                // 2. تبدیل تاریخ شمسی به میلادی استاندارد برای ارسال به سرور
+                // 2. تبدیل تاریخ به میلادی استاندارد برای ارسال به سرور
                 if (dataToSend.birthOrRegisterDate) {
                     const dateVal = dataToSend.birthOrRegisterDate;
                     
-                    console.log("Original dateVal:", dateVal, "Type:", typeof dateVal);
+                    let gregorianDate = null;
                     
-                    let momentDate;
-                    
-                    // اگر moment object است
-                    if (moment.isMoment(dateVal)) {
-                        console.log("Is Moment object, isValid:", dateVal.isValid());
-                        if (dateVal.isValid()) {
-                            momentDate = dateVal;
-                        } else {
-                            momentDate = null;
-                        }
-                    }
-                    // اگر string با فرمت شمسی است
-                    else if (typeof dateVal === 'string' && dateVal.includes('/')) {
-                        momentDate = moment(dateVal, 'jYYYY/jMM/jDD');
-                        console.log("Parsed from string, isValid:", momentDate.isValid());
-                    }
-                    // اگر string با فرمت دیگری است
-                    else if (typeof dateVal === 'string') {
-                        momentDate = moment(dateVal);
-                        console.log("Parsed as regular date, isValid:", momentDate.isValid());
-                    }
-                    // اگر هیچکدام نبود
-                    else {
-                        momentDate = null;
+                    // اگر DateObject از react-multi-date-picker است
+                    if (dateVal && typeof dateVal === 'object' && dateVal.toDate) {
+                        const jsDate = dateVal.toDate();
+                        gregorianDate = moment(jsDate).format('YYYY-MM-DD');
                     }
                     
-                    if (momentDate && momentDate.isValid()) {
-                        // ارسال فقط تاریخ بدون زمان (YYYY-MM-DD)
-                        dataToSend.birthOrRegisterDate = momentDate.format('YYYY-MM-DD');
-                        console.log("Converted to:", dataToSend.birthOrRegisterDate);
-                    } else {
-                        console.log("Date is invalid, setting to null");
-                        dataToSend.birthOrRegisterDate = null;
-                    }
+                    dataToSend.birthOrRegisterDate = gregorianDate;
                 } else {
                     dataToSend.birthOrRegisterDate = null;
                 }
@@ -102,32 +76,20 @@ const EditCustomer = () => {
                 delete dataToSend.createdAt;
                 delete dataToSend.updatedAt;
 
-                console.log("Sending Clean & Converted Data:", dataToSend);
-                console.log("birthOrRegisterDate final format:", dataToSend.birthOrRegisterDate);
-
                 await patch(`/customers/${id}`, dataToSend);
 
                 setSuccess("مشتری با موفقیت ویرایش شد");
-                setTimeout(() => navigate("/customers/list"), 1500);
+                setTimeout(() => navigate("/customers"), 1500);
 
             } catch (err) {
                 console.error("Update Error:", err);
                 
-                // نمایش کامل پاسخ سرور
-                if (err.response?.data) {
-                    console.log("Server Response Data:", err.response.data);
-                    console.log("Server Validation Errors:", err.response.data.errors);
-                }
-                
                 if (err.response?.status === 500) {
                     setError("خطای سرور (500): مشکل داخلی سرور.");
                 } else if (err.response?.status === 400) {
-                    // نمایش خطای دقیق سرور به کاربر
                     const errorMsg = err.response.data?.errors?.[0]?.message || 
                                     err.response.data?.message || 
                                     "خطای اعتبارسنجی (400)";
-                    
-                    console.log("Detailed 400 Error:", errorMsg);
                     setError(`خطای اعتبارسنجی: ${errorMsg}`);
                 } else if (err.response?.status === 404) {
                     setError("مشتری پیدا نشد.");
@@ -144,13 +106,15 @@ const EditCustomer = () => {
         try {
             const data = await get(`/customers/${id}`);
             if (data) {
-                console.log("Raw data from server:", data);
-                console.log("birthOrRegisterDate from server:", data.birthOrRegisterDate);
-                
-                let jalaliDate = "";
+                // تبدیل تاریخ میلادی به DateObject فارسی
+                let dateObject = null;
                 if (data.birthOrRegisterDate) {
-                    jalaliDate = moment(data.birthOrRegisterDate).format('jYYYY/jMM/jDD');
-                    console.log("Converted jalali date:", jalaliDate);
+                    const gregorianDate = new Date(data.birthOrRegisterDate);
+                    dateObject = new DateObject({
+                        date: gregorianDate,
+                        calendar: persian,
+                        locale: persian_fa
+                    });
                 }
 
                 formik.setValues({
@@ -159,14 +123,12 @@ const EditCustomer = () => {
                     nationalId: data.nationalId || "",
                     mobile: data.mobile || "",
                     phone: data.phone || "",
-                    birthOrRegisterDate: jalaliDate,
+                    birthOrRegisterDate: dateObject,
                     postalCode: data.postalCode || "",
                     economicCode: data.economicCode || "",
                     address: data.address || "",
                     description: data.description || "",
                 });
-                
-                console.log("Final formik birthOrRegisterDate:", jalaliDate);
             }
         } catch (err) {
             console.error("Load Error:", err);
@@ -198,16 +160,20 @@ const EditCustomer = () => {
                                         <Row>
                                             <Col md={4}>
                                                 <div className="mb-3">
-                                                    <Label>نوع مشتری</Label>
+                                                    <Label>نوع مشتری <span className="text-danger">*</span></Label>
                                                     <Input
                                                         type="select"
                                                         name="customerType"
                                                         value={formik.values.customerType}
                                                         onChange={formik.handleChange}
+                                                        invalid={formik.touched.customerType && !!formik.errors.customerType}
                                                     >
                                                         <option value="real">حقیقی</option>
                                                         <option value="company">حقوقی</option>
                                                     </Input>
+                                                    {formik.touched.customerType && formik.errors.customerType && (
+                                                        <FormFeedback>{formik.errors.customerType}</FormFeedback>
+                                                    )}
                                                 </div>
                                             </Col>
                                             <Col md={8}>
@@ -217,8 +183,12 @@ const EditCustomer = () => {
                                                         name="name"
                                                         value={formik.values.name}
                                                         onChange={formik.handleChange}
-                                                        invalid={!!formik.errors.name}
+                                                        onBlur={formik.handleBlur}
+                                                        invalid={formik.touched.name && !!formik.errors.name}
                                                     />
+                                                    {formik.touched.name && formik.errors.name && (
+                                                        <FormFeedback>{formik.errors.name}</FormFeedback>
+                                                    )}
                                                 </div>
                                             </Col>
                                         </Row>
@@ -229,15 +199,8 @@ const EditCustomer = () => {
                                                     <Label>تاریخ تولد / ثبت</Label>
                                                     <DatePickerWithIcon
                                                         value={formik.values.birthOrRegisterDate}
-                                                        onChange={(v) => {
-                                                            console.log("DatePicker onChange - Raw value:", v);
-                                                            console.log("DatePicker onChange - Type:", typeof v);
-                                                            console.log("DatePicker onChange - Is Moment?:", moment.isMoment(v));
-                                                            if (moment.isMoment(v)) {
-                                                                console.log("DatePicker onChange - isValid?:", v.isValid());
-                                                                console.log("DatePicker onChange - Formatted:", v.format('jYYYY/jMM/jDD'));
-                                                            }
-                                                            formik.setFieldValue("birthOrRegisterDate", v);
+                                                        onChange={(dateObject) => {
+                                                            formik.setFieldValue("birthOrRegisterDate", dateObject);
                                                         }}
                                                     />
                                                     <small className="text-muted">فرمت: 1402/01/01</small>
@@ -245,12 +208,23 @@ const EditCustomer = () => {
                                             </Col>
                                             <Col md={4}>
                                                 <div className="mb-3">
-                                                    <Label>کد ملی / شناسه</Label>
+                                                    <Label>
+                                                        {formik.values.customerType === 'real' ? 'کد ملی' : 'شناسه ملی'}
+                                                    </Label>
                                                     <Input
                                                         name="nationalId"
                                                         value={formik.values.nationalId}
                                                         onChange={formik.handleChange}
+                                                        onBlur={formik.handleBlur}
+                                                        invalid={formik.touched.nationalId && !!formik.errors.nationalId}
+                                                        maxLength={formik.values.customerType === 'real' ? 10 : 11}
                                                     />
+                                                    {formik.touched.nationalId && formik.errors.nationalId && (
+                                                        <FormFeedback>{formik.errors.nationalId}</FormFeedback>
+                                                    )}
+                                                    <small className="text-muted">
+                                                        {formik.values.customerType === 'real' ? '10 رقم' : '11 رقم'}
+                                                    </small>
                                                 </div>
                                             </Col>
                                             <Col md={4}>
@@ -260,7 +234,15 @@ const EditCustomer = () => {
                                                         name="mobile"
                                                         value={formik.values.mobile}
                                                         onChange={formik.handleChange}
+                                                        onBlur={formik.handleBlur}
+                                                        invalid={formik.touched.mobile && !!formik.errors.mobile}
+                                                        placeholder="09123456789"
+                                                        maxLength={11}
                                                     />
+                                                    {formik.touched.mobile && formik.errors.mobile && (
+                                                        <FormFeedback>{formik.errors.mobile}</FormFeedback>
+                                                    )}
+                                                    <small className="text-muted">11 رقم، شروع با 09</small>
                                                 </div>
                                             </Col>
                                         </Row>
@@ -272,7 +254,8 @@ const EditCustomer = () => {
                                                     <Input 
                                                         name="phone" 
                                                         value={formik.values.phone} 
-                                                        onChange={formik.handleChange} 
+                                                        onChange={formik.handleChange}
+                                                        placeholder="02112345678"
                                                     />
                                                 </div>
                                             </Col>
@@ -282,8 +265,15 @@ const EditCustomer = () => {
                                                     <Input 
                                                         name="postalCode" 
                                                         value={formik.values.postalCode} 
-                                                        onChange={formik.handleChange} 
+                                                        onChange={formik.handleChange}
+                                                        onBlur={formik.handleBlur}
+                                                        invalid={formik.touched.postalCode && !!formik.errors.postalCode}
+                                                        maxLength={10}
                                                     />
+                                                    {formik.touched.postalCode && formik.errors.postalCode && (
+                                                        <FormFeedback>{formik.errors.postalCode}</FormFeedback>
+                                                    )}
+                                                    <small className="text-muted">10 رقم</small>
                                                 </div>
                                             </Col>
                                             <Col md={4}>
@@ -292,8 +282,13 @@ const EditCustomer = () => {
                                                     <Input 
                                                         name="economicCode" 
                                                         value={formik.values.economicCode} 
-                                                        onChange={formik.handleChange} 
+                                                        onChange={formik.handleChange}
+                                                        onBlur={formik.handleBlur}
+                                                        invalid={formik.touched.economicCode && !!formik.errors.economicCode}
                                                     />
+                                                    {formik.touched.economicCode && formik.errors.economicCode && (
+                                                        <FormFeedback>{formik.errors.economicCode}</FormFeedback>
+                                                    )}
                                                 </div>
                                             </Col>
                                         </Row>
@@ -304,7 +299,8 @@ const EditCustomer = () => {
                                                 type="textarea" 
                                                 name="address" 
                                                 value={formik.values.address} 
-                                                onChange={formik.handleChange} 
+                                                onChange={formik.handleChange}
+                                                rows={3}
                                             />
                                         </div>
                                         
@@ -314,7 +310,8 @@ const EditCustomer = () => {
                                                 type="textarea" 
                                                 name="description" 
                                                 value={formik.values.description} 
-                                                onChange={formik.handleChange} 
+                                                onChange={formik.handleChange}
+                                                rows={3}
                                             />
                                         </div>
 
@@ -325,7 +322,7 @@ const EditCustomer = () => {
                                             <Button 
                                                 type="button" 
                                                 color="secondary" 
-                                                onClick={() => navigate("/customers/list")}
+                                                onClick={() => navigate("/customers")}
                                             >
                                                 بازگشت
                                             </Button>
