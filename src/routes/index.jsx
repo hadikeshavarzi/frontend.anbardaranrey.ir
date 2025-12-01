@@ -31,7 +31,7 @@ import EditCustomer from "../pages/Customers/EditCustomer";
 import ReceiptForm from "../pages/Receipt/ReceiptForm";
 import ReceiptsList from "../pages/Receipt/ReceiptsList";
 import ReceiptView from "../pages/Receipt/ReceiptView";
-
+import EditReceipt from "../pages/Receipt/EditReceipt";
 /* Auth */
 import Login from "../pages/Authentication/Login";
 import Register from "../pages/Authentication/Register";
@@ -75,7 +75,7 @@ const authProtectedRoutes = [
   { path: "/receipt/form", component: <ReceiptForm /> },
   { path: "/receipt/list", component: <ReceiptsList /> },
   { path: "/receipts/view/:id", component: <ReceiptView /> },  
-
+  { path: "/receipts/edit/:id", component: <EditReceipt /> },
   /* Default */
   { path: "/", exact: true, component: <Navigate to="/dashboard" /> },
 ];

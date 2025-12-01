@@ -74,13 +74,13 @@ const DEFAULT_VISIBILITY = {
 };
 
 /* ------------------------------------------------------------- */
-const ReceiptItemsTable = ({ onItemsChange }) => {
+const ReceiptItemsTable = ({ onItemsChange, initialItems }) => {
     /* -------------------------------------------------------------
      * ۱) داده‌ها
      * ------------------------------------------------------------- */
 
     const [data, setData] = useState([]);
-    const [categories, setCategories] = useState([]); // ✅ آرایه خالی به جای undefined
+    const [categories, setCategories] = useState([]);
     const [productsByCat, setProductsByCat] = useState({});
     const [columnVisibility, setColumnVisibility] = useState(() => {
         try {
@@ -94,6 +94,7 @@ const ReceiptItemsTable = ({ onItemsChange }) => {
     const [sorting, setSorting] = useState([]);
     const [globalFilter, setGlobalFilter] = useState("");
     const [showColumnModal, setShowColumnModal] = useState(false);
+    const [isInitialLoad, setIsInitialLoad] = useState(false);
 
     const tableRef = useRef(null);
 
@@ -107,20 +108,129 @@ const ReceiptItemsTable = ({ onItemsChange }) => {
                 const res = await fetch("https://portal.anbardaranrey.ir/api/product-categories?limit=500");
                 const json = await res.json();
                 
-                // ✅ چک کردن که آرایه موجود باشه
                 if (json?.docs && Array.isArray(json.docs)) {
                     setCategories(json.docs);
                 }
             } catch (err) {
                 console.error("Error loading categories:", err);
-                setCategories([]); // ✅ در صورت خطا آرایه خالی
+                setCategories([]);
             }
         };
         loadCats();
     }, []);
 
     /* -------------------------------------------------------------
-     * ۳) لود کالاها بر اساس گروه
+     * ۳) لود آیتم‌های اولیه (برای ویرایش)
+     * ------------------------------------------------------------- */
+    useEffect(() => {
+        console.log("🔍 useEffect initialItems triggered");
+        console.log("📦 initialItems:", initialItems);
+        console.log("📦 initialItems length:", initialItems?.length);
+        console.log("📦 data length:", data.length);
+        
+        // ⭐ فقط لود کن اگر initialItems پر باشه و data خالی باشه
+        if (initialItems && initialItems.length > 0 && data.length === 0) {
+            console.log("✅ شروع لود initialItems در ReceiptItemsTable");
+            console.log("📥 تعداد آیتم‌ها:", initialItems.length);
+            
+            const loadItemsAsync = async () => {
+                const formattedRows = [];
+                
+                for (let index = 0; index < initialItems.length; index++) {
+                    const item = initialItems[index];
+                    console.log(`🔄 Processing item ${index + 1}:`, item);
+                    
+                    // ⭐ اگر آیتم محصول دارد و گروه نداره، باید گروهش را پیدا کنیم
+                    let categoryId = item.group;
+                    
+                    if (item.description && !categoryId) {
+                        try {
+                            console.log(`🔍 Finding category for product ${item.description}`);
+                            const res = await fetch(
+                                `https://portal.anbardaranrey.ir/api/products/${item.description}`
+                            );
+                            const product = await res.json();
+                            
+                            if (product?.category) {
+                                categoryId = typeof product.category === 'object' 
+                                    ? product.category.id 
+                                    : product.category;
+                                
+                                console.log(`📂 گروه محصول ${item.description}: ${categoryId}`);
+                            }
+                        } catch (err) {
+                            console.error("Error finding group for product:", err);
+                        }
+                    }
+                    
+                    // ⭐ لود محصولات این گروه
+                    if (categoryId) {
+                        console.log(`📦 Loading products for category ${categoryId}`);
+                        await loadProductsForCategory(categoryId);
+                    }
+
+                    const formattedItem = {
+                        id: index + 1, // شماره ردیف برای UI
+                        itemId: item.itemId, // ⭐ ID واقعی از database (حفظ می‌شود)
+                        nationalProductId: item.nationalProductId || "",
+                        productDescription: item.productDescription || "",
+                        group: categoryId || "", // گروه کالا
+                        description: item.description || "", // ⭐ ID محصول (حفظ می‌شود)
+                        count: item.count || "",
+                        unit: item.unit || "",
+                        productionType: item.productionType || "",
+                        isUsed: item.isUsed || false,
+                        isDefective: item.isDefective || false,
+                        fullWeight: item.fullWeight || "",
+                        emptyWeight: item.emptyWeight || "",
+                        netWeight: item.netWeight || 0,
+                        originWeight: item.originWeight || "",
+                        weightDiff: item.weightDiff || 0,
+                        length: item.length || "",
+                        width: item.width || "",
+                        thickness: item.thickness || "",
+                        heatNumber: item.heatNumber || "",
+                        bundleNo: item.bundleNo || "",
+                        brand: item.brand || "",
+                        orderNo: item.orderNo || "",
+                        depoLocation: item.depoLocation || "",
+                        descriptionNotes: item.descriptionNotes || "",
+                        row: item.row || "",
+                    };
+                    
+                    console.log(`✅ Item ${index + 1} formatted:`, {
+                        id: formattedItem.id,
+                        itemId: formattedItem.itemId,
+                        description: formattedItem.description,
+                        group: formattedItem.group
+                    });
+                    
+                    formattedRows.push(formattedItem);
+                }
+
+                console.log("✅ All rows formatted:", formattedRows.length);
+                console.log("📊 First row sample:", formattedRows[0]);
+                
+                setData(formattedRows);
+                setIsInitialLoad(true);
+                
+                console.log("✅ data state به‌روزرسانی شد");
+            };
+            
+            loadItemsAsync();
+        } else {
+            if (!initialItems) {
+                console.log("⚠️ initialItems is null/undefined");
+            } else if (initialItems.length === 0) {
+                console.log("⚠️ initialItems is empty array");
+            } else if (data.length > 0) {
+                console.log("⚠️ data already has items (data.length = " + data.length + ")");
+            }
+        }
+    }, [initialItems]); // ⭐ فقط به initialItems وابسته باشد
+
+    /* -------------------------------------------------------------
+     * ۴) لود کالاها بر اساس گروه
      * ------------------------------------------------------------- */
     const loadProductsForCategory = async (catId) => {
         if (!catId) return;
@@ -133,7 +243,6 @@ const ReceiptItemsTable = ({ onItemsChange }) => {
 
             const json = await res.json();
 
-            // ✅ چک کردن که آرایه موجود باشه
             if (json?.docs && Array.isArray(json.docs)) {
                 setProductsByCat((prev) => ({
                     ...prev,
@@ -144,16 +253,17 @@ const ReceiptItemsTable = ({ onItemsChange }) => {
             console.error("Error loading products:", err);
             setProductsByCat((prev) => ({
                 ...prev,
-                [catId]: [], // ✅ در صورت خطا آرایه خالی
+                [catId]: [],
             }));
         }
     };
 
     /* -------------------------------------------------------------
-     * ۴) ایجاد ردیف خالی
+     * ۵) ایجاد ردیف خالی
      * ------------------------------------------------------------- */
     const createEmptyRow = (id) => ({
-        id,
+        id, // شماره ردیف برای UI
+        itemId: null, // ⭐ آیتم جدید itemId ندارد
         nationalProductId: "",
         productDescription: "",
         group: "",
@@ -181,25 +291,49 @@ const ReceiptItemsTable = ({ onItemsChange }) => {
     });
 
     /* -------------------------------------------------------------
-     * ۵) افزودن ردیف
+     * ۶) افزودن ردیف
      * ------------------------------------------------------------- */
     const addRow = () => {
         setData((prev) => [...prev, createEmptyRow(prev.length + 1)]);
     };
 
-    const deleteRow = (id) => {
-        setData((prev) => prev.filter((r) => r.id !== id));
+    const deleteRow = (rowId) => {
+        setData((prev) => {
+            const filtered = prev.filter((r) => r.id !== rowId);
+            
+            // ⭐ مهم: فقط id (شماره ردیف UI) را دوباره شماره‌گذاری می‌کنیم
+            // itemId (ID واقعی database) تغییر نمی‌کند
+            return filtered.map((row, index) => ({
+                ...row,
+                id: index + 1, // فقط شماره ردیف UI
+                // itemId همان می‌ماند
+            }));
+        });
     };
 
     /* -------------------------------------------------------------
-     * ۶) اعلام تغییرات آیتم‌ها به فرم پدر
+     * ۷) اعلام تغییرات آیتم‌ها به فرم پدر
      * ------------------------------------------------------------- */
     useEffect(() => {
-        if (onItemsChange) onItemsChange(data);
+        console.log("📢 useEffect onItemsChange triggered");
+        console.log("📊 data length:", data.length);
+        
+        // ⭐ فقط اگر data پر باشه و onItemsChange موجود باشه
+        if (onItemsChange && data.length > 0) {
+            console.log("✅ ارسال data به parent");
+            console.log("📦 data sample:", data[0]);
+            onItemsChange(data);
+        } else {
+            if (!onItemsChange) {
+                console.log("⚠️ onItemsChange is not defined");
+            } else if (data.length === 0) {
+                console.log("⚠️ data is empty, not sending to parent");
+            }
+        }
     }, [data, onItemsChange]);
 
     /* -------------------------------------------------------------
-     * ۷) ناوبری با Enter
+     * ۸) ناوبری با Enter
      * ------------------------------------------------------------- */
     const handleNavigate = (e) => {
         if (e.key === "Enter") {
@@ -212,7 +346,7 @@ const ReceiptItemsTable = ({ onItemsChange }) => {
     };
 
     /* -------------------------------------------------------------
-     * ۸) تعریف ستون‌ها (۳۳ ستون کامل)
+     * ۹) تعریف ستون‌ها (۳۳ ستون کامل)
      * ------------------------------------------------------------- */
     const columns = useMemo(() => [
         {
@@ -220,7 +354,16 @@ const ReceiptItemsTable = ({ onItemsChange }) => {
             header: "#",
             accessorKey: "id",
             enableHiding: false,
-            cell: ({ row }) => <b>{row.original.id}</b>,
+            cell: ({ row }) => (
+                <div>
+                    <b>{row.original.id}</b>
+                    {row.original.itemId && (
+                        <div style={{ fontSize: "10px", color: "#999" }}>
+                            ID: {row.original.itemId}
+                        </div>
+                    )}
+                </div>
+            ),
         },
 
         // شناسه ملی کالا
@@ -289,7 +432,6 @@ const ReceiptItemsTable = ({ onItemsChange }) => {
                         onKeyDown={handleNavigate}
                     >
                         <option value="">انتخاب</option>
-                        {/* ✅ چک کردن آرایه قبل از map */}
                         {Array.isArray(categories) && categories.map((c) => (
                             <option key={c.id} value={c.id}>
                                 {c.name}
@@ -308,7 +450,7 @@ const ReceiptItemsTable = ({ onItemsChange }) => {
             cell: ({ row, table }) => {
                 const catId = row.original.group;
                 const value = row.original.description;
-                const items = productsByCat[catId] || []; // ✅ fallback به آرایه خالی
+                const items = productsByCat[catId] || [];
 
                 return (
                     <Input
@@ -325,7 +467,6 @@ const ReceiptItemsTable = ({ onItemsChange }) => {
                     >
                         <option value="">{catId ? "انتخاب" : "-"}</option>
 
-                        {/* ✅ چک کردن آرایه قبل از map */}
                         {Array.isArray(items) && items.map((p) => (
                             <option key={p.id} value={p.id}>
                                 {p.name}
@@ -769,7 +910,7 @@ const ReceiptItemsTable = ({ onItemsChange }) => {
     ], [categories, productsByCat]);
 
     /* -------------------------------------------------------------
-     * ۹) ساخت جدول TanStack
+     * ۱۰) ساخت جدول TanStack
      * ------------------------------------------------------------- */
     const table = useReactTable({
         data,
@@ -790,12 +931,22 @@ const ReceiptItemsTable = ({ onItemsChange }) => {
             }
         },
         meta: {
-            updateData: (rowIndex, columnId, value) =>
-                setData((prev) =>
-                    prev.map((row, idx) =>
-                        idx === rowIndex ? { ...row, [columnId]: value } : row
-                    )
-                ),
+            updateData: (rowIndex, columnId, value) => {
+                console.log(`🔄 updateData called: row=${rowIndex}, column=${columnId}, value=${value}`);
+                
+                setData((prev) => {
+                    const newData = prev.map((row, idx) =>
+                        idx === rowIndex ? { 
+                            ...row, 
+                            [columnId]: value 
+                            // ⭐ itemId تغییر نمی‌کند، فقط مقادیر دیگر
+                        } : row
+                    );
+                    
+                    console.log(`✅ Row ${rowIndex} updated:`, newData[rowIndex]);
+                    return newData;
+                });
+            },
         },
     });
 

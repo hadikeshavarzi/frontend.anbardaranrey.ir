@@ -355,7 +355,7 @@ const ReceiptList = () => {
                                                                 </Link>
 
                                                                 <Link
-                                                                    to={`/receipt/form?id=${receipt.id}`}
+                                                                    to={`/receipts/edit/${receipt.id}`}
                                                                     className="btn btn-sm btn-soft-primary"
                                                                     title="ویرایش"
                                                                 >
