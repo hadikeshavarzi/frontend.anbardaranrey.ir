@@ -1,0 +1,299 @@
+/* ═══════════════════════════════════════════════════════════════
+   🚗 IRANIAN PLATE DISPLAY — Component Styles
+   ═══════════════════════════════════════════════════════════════ */
+
+.iranian-plate {
+  display: inline-block;
+  direction: ltr;
+  font-family: 'B Nazanin', 'IRANSans', 'Tahoma', sans-serif;
+}
+
+.plate-container {
+  display: flex;
+  align-items: stretch;
+  background: #ffffff;
+  border: 2px solid #1a1a1a;
+  border-radius: 4px;
+  overflow: hidden;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.12);
+  height: 38px;
+  min-width: 220px;
+}
+
+.plate-section {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0 8px;
+  border-left: 2px solid #1a1a1a;
+  
+  &:last-child {
+    border-left: 2px solid #1a1a1a;
+  }
+}
+
+/* بخش راست - کد استان و ایران */
+.plate-right {
+  flex-direction: column;
+  padding: 3px 6px;
+  min-width: 52px;
+
+  .plate-number {
+    font-size: 17px;
+    font-weight: 700;
+    color: #000000;
+    line-height: 1;
+    margin-bottom: 1px;
+  }
+
+  .iran-section {
+    display: flex;
+    align-items: center;
+    gap: 3px;
+    margin-top: 1px;
+
+    .iran-flag {
+      width: 14px;
+      height: 9px;
+      background: linear-gradient(
+        to bottom,
+        #239f40 0%,
+        #239f40 33%,
+        #ffffff 33%,
+        #ffffff 66%,
+        #da0000 66%,
+        #da0000 100%
+      );
+      border-radius: 1px;
+      box-shadow: 0 1px 2px rgba(0, 0, 0, 0.2);
+    }
+
+    .iran-text {
+      font-size: 16px;
+      font-weight: 600;
+      color: #1a1a1a;
+      letter-spacing: 0.3px;
+    }
+  }
+}
+
+/* بخش وسط - سه رقم */
+.plate-middle {
+  flex: 1;
+  min-width: 65px;
+
+  .plate-number {
+    font-size: 24px;
+    font-weight: 700;
+    color: #000000;
+    line-height: 1;
+    letter-spacing: 1.5px;
+  }
+}
+
+/* بخش حرف */
+.plate-letter {
+  min-width: 40px;
+
+  .plate-char {
+    font-size: 22px;
+    font-weight: 700;
+    color: #000000;
+    font-family: 'B Nazanin', 'IRANSans', 'Tahoma', sans-serif;
+  }
+}
+
+/* بخش چپ - دو رقم */
+.plate-left {
+  min-width: 45px;
+
+  .plate-number {
+    font-size: 22px;
+    font-weight: 700;
+    color: #000000;
+    line-height: 1;
+  }
+}
+
+/* ─────────────────────────────────────────────────────────────────
+   🖨️ Print Styles
+   ───────────────────────────────────────────────────────────────── */
+@media print {
+  .iranian-plate {
+    .plate-container {
+      box-shadow: none !important;
+      border: 2px solid #000 !important;
+      height: 40px;
+      min-width: 240px;
+    }
+
+    .plate-section {
+      border-left: 2px solid #000 !important;
+    }
+
+    .plate-right {
+      background: #f0f0f0 !important;
+      -webkit-print-color-adjust: exact;
+      print-color-adjust: exact;
+
+      .plate-number {
+        font-size: 18px !important;
+      }
+
+      .iran-section {
+        .iran-text {
+          font-size: 16px !important;
+        }
+
+        .iran-flag {
+          width: 14px;
+          height: 9px;
+          -webkit-print-color-adjust: exact;
+          print-color-adjust: exact;
+        }
+      }
+    }
+
+    .plate-middle {
+      min-width: 70px;
+
+      .plate-number {
+        font-size: 26px !important;
+
+        &.large {
+          font-size: 26px !important;
+        }
+      }
+    }
+
+    .plate-letter {
+      background: #fffaeb !important;
+      min-width: 45px;
+      -webkit-print-color-adjust: exact;
+      print-color-adjust: exact;
+
+      .plate-char {
+        font-size: 24px !important;
+      }
+    }
+
+    .plate-left {
+      min-width: 50px;
+
+      .plate-number {
+        font-size: 24px !important;
+      }
+    }
+  }
+}
+
+/* ─────────────────────────────────────────────────────────────────
+   📱 Responsive Design
+   ───────────────────────────────────────────────────────────────── */
+@media (max-width: 768px) {
+  .plate-container {
+    height: 45px;
+    min-width: 250px;
+  }
+
+  .plate-right {
+    min-width: 60px;
+
+    .plate-number {
+      font-size: 20px;
+    }
+
+    .iran-section {
+      .iran-text {
+        font-size: 16px;
+      }
+
+      .iran-flag {
+        width: 14px;
+        height: 9px;
+      }
+    }
+  }
+
+  .plate-middle {
+    min-width: 75px;
+
+    .plate-number {
+      font-size: 28px;
+
+      &.large {
+        font-size: 28px;
+      }
+    }
+  }
+
+  .plate-letter {
+    min-width: 45px;
+
+    .plate-char {
+      font-size: 26px;
+    }
+  }
+
+  .plate-left {
+    min-width: 50px;
+
+    .plate-number {
+      font-size: 26px;
+    }
+  }
+}
+
+@media (max-width: 576px) {
+  .plate-container {
+    height: 40px;
+    min-width: 220px;
+  }
+
+  .plate-right {
+    min-width: 55px;
+
+    .plate-number {
+      font-size: 18px;
+    }
+
+    .iran-section {
+      .iran-text {
+        font-size: 16px;
+      }
+
+      .iran-flag {
+        width: 12px;
+        height: 8px;
+      }
+    }
+  }
+
+  .plate-middle {
+    min-width: 65px;
+
+    .plate-number {
+      font-size: 24px;
+
+      &.large {
+        font-size: 24px;
+      }
+    }
+  }
+
+  .plate-letter {
+    min-width: 40px;
+
+    .plate-char {
+      font-size: 22px;
+    }
+  }
+
+  .plate-left {
+    min-width: 45px;
+
+    .plate-number {
+      font-size: 22px;
+    }
+  }
+}

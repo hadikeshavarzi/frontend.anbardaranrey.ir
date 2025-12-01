@@ -1,14 +1,11 @@
-// src/pages/Receipt/ReceiptForm.jsx
 import React, { useState } from "react";
 import { Card, CardBody, Button, Alert } from "reactstrap";
-
 import { post } from "../../helpers/api_helper";
 
 import "../../assets/scss/receipt.scss";
 import "../../assets/scss/receipt-items-table.scss";
 import "../../assets/scss/receipt-costs.scss";
 
-// Components
 import ReceiptOwnerSection from "../../components/Receipt/ReceiptOwnerSection";
 import ReceiptHeader from "../../components/Receipt/ReceiptHeader";
 import ReceiptDocInfo from "../../components/Receipt/ReceiptDocInfo";
@@ -18,8 +15,32 @@ import ReceiptCosts from "../../components/Receipt/ReceiptCosts";
 import ReceiptPaymentSection from "../../components/Receipt/ReceiptPaymentSection";
 
 const ReceiptForm = () => {
-  // ------------------- STATE -------------------
   const [refType, setRefType] = useState("none");
+
+  const [refValues, setRefValues] = useState({
+    barnamehNumber: "",
+    barnamehTracking: "",
+    pettehNumber: "",
+    havaleNumber: "",
+    productionNumber: "",
+  });
+
+  // ⭐ تابع با لاگ کامل
+  const updateRefValue = (key, value) => {
+    console.log("═══════════════════════════════════════");
+    console.log("🔄 updateRefValue فراخوانی شد");
+    console.log("📊 State قبلی:", JSON.stringify(refValues, null, 2));
+    console.log(`📝 کلید دریافتی: "${key}"`);
+    console.log(`💬 مقدار دریافتی: "${value}"`);
+    
+    setRefValues((prev) => {
+      const newState = { ...prev, [key]: value };
+      console.log("✅ State جدید:", JSON.stringify(newState, null, 2));
+      console.log("═══════════════════════════════════════");
+      return newState;
+    });
+  };
+
   const [docDate, setDocDate] = useState("");
   const [barnamehDate, setBarnamehDate] = useState("");
   const [birthDateDriver, setBirthDateDriver] = useState("");
@@ -27,13 +48,18 @@ const ReceiptForm = () => {
 
   const [owner, setOwner] = useState({});
   const [deliverer, setDeliverer] = useState({});
-
   const [items, setItems] = useState([]);
 
+  const [driver, setDriver] = useState({
+    name: "",
+    nationalId: "",
+    phone: "",
+  });
+
   const [plate, setPlate] = useState({
-    iranRight: "",
-    mid3: "",
+    right2: "",
     letter: "",
+    middle3: "",
     left2: "",
   });
 
@@ -61,7 +87,7 @@ const ReceiptForm = () => {
   const [success, setSuccess] = useState("");
   const [error, setError] = useState("");
 
-  // ------------------- UTIL -------------------
+  // ---------------------- UTIL ----------------------
   const formatDate = (d) => {
     if (!d) return null;
     if (typeof d === "string") return d;
@@ -69,14 +95,11 @@ const ReceiptForm = () => {
     return null;
   };
 
-  // ✅ گرفتن Member ID
   const getMemberId = () => {
     try {
-      // اول از user
       const user = JSON.parse(localStorage.getItem("user") || "{}");
       if (user.id) return user.id;
 
-      // بعد از token
       const token = localStorage.getItem("authToken");
       if (!token) throw new Error("Token not found");
 
@@ -93,167 +116,99 @@ const ReceiptForm = () => {
 
   // ------------------- ذخیره آیتم‌ها -------------------
   const saveItemsToBackend = async () => {
+    console.log("\n🔹🔹🔹 شروع ذخیره آیتم‌ها 🔹🔹🔹");
     const savedIDs = [];
 
-    console.log("🟦 شروع ذخیره آیتم‌ها در receiptitems...");
+    for (let i = 0; i < items.length; i++) {
+      const row = items[i];
+      console.log(`\n📦 آیتم ${i + 1}/${items.length}:`, row);
 
-    const memberId = getMemberId();
-    console.log("👤 Member ID:", memberId);
+      const productId = row.description ? Number(row.description) : null;
 
-    for (let row of items) {
-      try {
-        if (!row.description) {
-          throw new Error(`ردیف ${row.id}: نام کالا الزامی است`);
-        }
+      const payloadItem = {
+        product: productId,
+        nationalProductId: row.nationalProductId || "",
+        productDescription: row.productDescription || "",
+        count: Number(row.count) || 0,
+        unit: row.unit || "",
+        productionType: row.productionType || null,
+        isUsed: row.isUsed || false,
+        isDefective: row.isDefective || false,
 
-        // ✅ گرفتن نام گروه و کالا
-        let categoryName = "";
-        let productName = "";
+        weights: {
+          fullWeight: Number(row.fullWeight) || 0,
+          emptyWeight: Number(row.emptyWeight) || 0,
+          netWeight: Number(row.netWeight) || 0,
+          originWeight: Number(row.originWeight) || 0,
+          weightDiff: Number(row.weightDiff) || 0,
+        },
 
-        if (row.group) {
-          try {
-            const catRes = await fetch(
-              `https://cms.anbardaranrey.ir/api/product-categories/${row.group}`,
-              {
-                headers: {
-                  Authorization: `Bearer ${localStorage.getItem("authToken")}`,
-                },
-              }
-            );
-            const catData = await catRes.json();
-            categoryName = catData.name || "";
-          } catch (err) {
-            console.warn("خطا در گرفتن نام گروه:", err);
-          }
-        }
+        dimensions: {
+          length: Number(row.length) || 0,
+          width: Number(row.width) || 0,
+          thickness: Number(row.thickness) || 0,
+        },
 
-        if (row.description) {
-          try {
-            const prodRes = await fetch(
-              `https://cms.anbardaranrey.ir/api/products/${row.description}`,
-              {
-                headers: {
-                  Authorization: `Bearer ${localStorage.getItem("authToken")}`,
-                },
-              }
-            );
-            const prodData = await prodRes.json();
-            productName = prodData.name || "";
-          } catch (err) {
-            console.warn("خطا در گرفتن نام کالا:", err);
-          }
-        }
+        heatNumber: row.heatNumber || "",
+        bundleNo: row.bundleNo || "",
+        brand: row.brand || "",
+        orderNo: row.orderNo || "",
+        depoLocation: row.depoLocation || "",
+        descriptionNotes: row.descriptionNotes || "",
+        row: row.row || "",
+      };
 
-        const payloadItem = {
-          nationalProductId: row.nationalProductId || "",
-          productDescription: row.productDescription || "",
+      console.log("📤 Payload آیتم:", JSON.stringify(payloadItem, null, 2));
 
-          group: categoryName,
-          description: productName,
-
-          count: Number(row.count) || 0,
-          unit: row.unit || "",
-
-          productionType: row.productionType || null,
-          isUsed: row.isUsed || false,
-          isDefective: row.isDefective || false,
-
-          weights: {
-            fullWeight: Number(row.fullWeight) || 0,
-            emptyWeight: Number(row.emptyWeight) || 0,
-            netWeight: Number(row.netWeight) || 0,
-            originWeight: Number(row.originWeight) || 0,
-            weightDiff: Number(row.weightDiff) || 0,
-          },
-
-          dimensions: {
-            length: Number(row.length) || 0,
-            width: Number(row.width) || 0,
-            thickness: Number(row.thickness) || 0,
-          },
-
-          heatNumber: row.heatNumber || "",
-          bundleNo: row.bundleNo || "",
-          brand: row.brand || "",
-          orderNo: row.orderNo || "",
-          depoLocation: row.depoLocation || "",
-          descriptionNotes: row.descriptionNotes || "",
-          row: row.row || "",
-        };
-
-        console.log("➡️ ارسال آیتم به Payload:", payloadItem);
-
-        const res = await post("/receiptitems", payloadItem);
-
-        console.log("⬅️ پاسخ Payload برای آیتم:", res);
-
-        const itemId = res?.doc?.id || res?.id;
-
-        if (!itemId) {
-          throw new Error("در ذخیره یکی از آیتم‌ها مشکل وجود دارد");
-        }
-
-        savedIDs.push(itemId);
-      } catch (err) {
-        console.error("❌ خطا در ذخیره آیتم:", err);
-
-        if (err.response?.data?.errors) {
-          console.error("📋 خطاهای Payload:");
-          err.response.data.errors.forEach((error, index) => {
-            console.error(`  ${index + 1}.`, error);
-            if (error.data?.errors) {
-              error.data.errors.forEach((fieldError) => {
-                console.error(`     - ${fieldError.path}: ${fieldError.message}`);
-              });
-            }
-          });
-        }
-
-        throw err;
-      }
+      const res = await post("/receiptitems", payloadItem);
+      const itemId = res?.doc?.id || res?.id;
+      
+      console.log(`✅ آیتم ذخیره شد با ID: ${itemId}`);
+      savedIDs.push(itemId);
     }
 
-    console.log("🟩 شناسه آیتم‌های ذخیره‌شده:", savedIDs);
+    console.log("\n✅ تمام آیتم‌ها ذخیره شدند. IDs:", savedIDs);
     return savedIDs;
   };
 
-  // ------------------- ذخیره اصلی Receipt -------------------
+  // --------------------- ذخیره رسید ---------------------
   const saveReceipt = async (status) => {
     try {
+      console.log("\n\n");
+      console.log("╔═══════════════════════════════════════════════════╗");
+      console.log("║         🚀 شروع ذخیره رسید                      ║");
+      console.log("╚═══════════════════════════════════════════════════╝");
+      console.log(`📊 وضعیت: ${status}`);
+
       setSaving(true);
       setError("");
       setSuccess("");
 
-      // ✅ Validation
+      // ─────────────────────────────────────────────
+      // اعتبارسنجی
+      // ─────────────────────────────────────────────
       if (!owner.id) {
         setError("لطفاً مالک را انتخاب کنید");
-        setSaving(false);
+        console.error("❌ مالک انتخاب نشده است");
         return;
       }
 
       if (items.length === 0) {
-        setError("حداقل یک آیتم کالا باید ثبت شود");
-        setSaving(false);
+        setError("حداقل یک آیتم باید ثبت شود");
+        console.error("❌ هیچ آیتمی ثبت نشده است");
         return;
       }
 
-      // ✅ چک کردن نام کالا
-      const invalidItems = items.filter((item) => !item.description);
-      if (invalidItems.length > 0) {
-        setError(`لطفاً برای ${invalidItems.length} ردیف، نام کالا را انتخاب کنید`);
-        setSaving(false);
-        return;
-      }
-
-      console.log("🟦 شروع ذخیره Receipt...");
-
-      // ✅ گرفتن Member ID
+      // ─────────────────────────────────────────────
+      // ذخیره آیتم‌ها
+      // ─────────────────────────────────────────────
+      const itemIDs = await saveItemsToBackend();
       const memberId = getMemberId();
 
-      // 1) ذخیره آیتم‌ها
-      const itemIDs = await saveItemsToBackend();
 
-      // 2) آماده کردن Payload رسید
+      // ─────────────────────────────────────────────
+      // ساخت Payload
+      // ─────────────────────────────────────────────
       const payload = {
         status,
         docDate: formatDate(docDate),
@@ -261,14 +216,17 @@ const ReceiptForm = () => {
         deliverer: deliverer.id ? Number(deliverer.id) : null,
 
         driver: {
-          name: deliverer.name || "",
-          nationalId: deliverer.nationalId || "",
+          name: driver.name || "",
+          nationalId: driver.nationalId || "",
+          phone: driver.phone || "",
           birthDate: formatDate(birthDateDriver) || null,
         },
 
+        dischargeDate: formatDate(dischargeDate) || null,
+
         plate: {
-          iranRight: plate.iranRight || "",
-          mid3: plate.mid3 || "",
+          iranRight: plate.right2 || "",
+          mid3: plate.middle3 || "",
           letter: plate.letter || "",
           left2: plate.left2 || "",
         },
@@ -285,7 +243,7 @@ const ReceiptForm = () => {
         },
 
         payment: {
-          paymentBy: paymentBy || null,
+          paymentBy,
           cardNumber: paymentInfo.cardNumber || "",
           accountNumber: paymentInfo.accountNumber || "",
           bankName: paymentInfo.bankName || "",
@@ -293,68 +251,71 @@ const ReceiptForm = () => {
           trackingCode: paymentInfo.trackingCode || "",
         },
 
-        items: itemIDs,
+        refDocument: {
+          refType,
+          barnamehNumber: refValues.barnamehNumber || "",
+          barnamehDate: formatDate(barnamehDate) || null,
+          barnamehTracking: refValues.barnamehTracking || "",
+          pettehNumber: refValues.pettehNumber || "",
+          havaleNumber: refValues.havaleNumber || "",
+          productionNumber: refValues.productionNumber || "",
+        },
 
-        // ✅ اضافه کردن member
+        items: itemIDs,
         member: memberId,
       };
 
-      console.log("➡️ ارسال Receipt به Payload:", payload);
+      // ─────────────────────────────────────────────
+      // لاگ Payload کامل
+      // ─────────────────────────────────────────────
+      console.log("\n📤 Payload نهایی که به بک‌اند ارسال می‌شود:");
+      console.log("═══════════════════════════════════════════════════");
+      console.log(JSON.stringify(payload, null, 2));
+      console.log("═══════════════════════════════════════════════════");
 
+      // ─────────────────────────────────────────────
+      // لاگ اختصاصی برای فیلدهای مرجع
+      // ─────────────────────────────────────────────
+      console.log("\n🔍 بررسی فیلدهای refDocument:");
+      console.log("─────────────────────────────────────────────");
+      console.log("refType:", payload.refDocument.refType);
+      console.log("barnamehNumber:", payload.refDocument.barnamehNumber);
+      console.log("barnamehTracking:", payload.refDocument.barnamehTracking);
+      console.log("barnamehDate:", payload.refDocument.barnamehDate);
+      console.log("pettehNumber:", payload.refDocument.pettehNumber);
+      console.log("havaleNumber:", payload.refDocument.havaleNumber);
+      console.log("productionNumber:", payload.refDocument.productionNumber);
+      console.log("─────────────────────────────────────────────");
+
+      // ─────────────────────────────────────────────
+      // ارسال به بک‌اند
+      // ─────────────────────────────────────────────
+      console.log("\n🚀 ارسال به بک‌اند...");
       const result = await post("/receipts", payload);
-
-      console.log("⬅️ پاسخ Payload برای Receipt:", result);
+      
+      console.log("\n✅ پاسخ دریافتی از بک‌اند:");
+      console.log(JSON.stringify(result, null, 2));
 
       if (result?.id || result?.doc?.id) {
-        const receiptId = result?.doc?.id || result?.id;
-        const receiptNo = result?.doc?.receiptNo || result?.receiptNo || receiptId;
+        const receiptNo = result?.doc?.receiptNo || result?.receiptNo;
+        console.log(`\n🎉 رسید با موفقیت ثبت شد! شماره: ${receiptNo}`);
+        setSuccess(`🎉 رسید با موفقیت ثبت شد! شماره: ${receiptNo}`);
 
-        setSuccess(`🎉 رسید با موفقیت ثبت شد! شماره رسید: ${receiptNo}`);
-
-        // ✅ پاک کردن فرم بعد از 3 ثانیه
-        setTimeout(() => {
-          window.location.reload();
-        }, 3000);
-      } else {
-        setError("خطا در ذخیره رسید");
+        setTimeout(() => window.location.reload(), 2000);
       }
     } catch (err) {
-      console.error("❌ خطای اصلی Payload:", err);
-
-      let errorMessage = "خطای ناشناخته";
-
-      if (err?.response?.data?.errors) {
-        console.error("📋 خطاهای دقیق:");
-        err.response.data.errors.forEach((error, i) => {
-          console.error(`  ${i + 1}. ${error.message}`);
-          if (error.data?.errors) {
-            error.data.errors.forEach((fe) => {
-              console.error(`     - ${fe.path}: ${fe.message}`);
-            });
-          }
-        });
-
-        const firstError = err.response.data.errors[0];
-        if (firstError.data?.errors) {
-          errorMessage = firstError.data.errors
-            .map((e) => `${e.label}: ${e.message}`)
-            .join(", ");
-        } else {
-          errorMessage = firstError.message;
-        }
-      } else if (err?.response?.data?.message) {
-        errorMessage = err.response.data.message;
-      } else if (err.message) {
-        errorMessage = err.message;
-      }
-
-      setError("خطای Payload: " + errorMessage);
+      console.error("\n❌ خطا در ذخیره رسید:");
+      console.error(err);
+      console.error("Stack trace:", err.stack);
+      setError("خطا در ذخیره رسید: " + (err.message || "خطای ناشناخته"));
+    } finally {
+      setSaving(false);
+      console.log("\n╔═══════════════════════════════════════════════════╗");
+      console.log("║         🏁 پایان فرآیند ذخیره                   ║");
+      console.log("╚═══════════════════════════════════════════════════╝\n\n");
     }
-
-    setSaving(false);
   };
 
-  // ------------------- UI -------------------
   return (
     <div className="page-content">
       <Card className="shadow-sm receipt-main-card">
@@ -364,26 +325,13 @@ const ReceiptForm = () => {
               <i className="ri-archive-2-line me-2"></i>
               رسید کالا
             </div>
-            <div className="subtitle">
-              ثبت ورود کالا به انبار به همراه مشخصات راننده و کالا
-            </div>
+            <div className="subtitle">ثبت ورود کالا به انبار</div>
           </div>
         </div>
 
         <CardBody>
-          {error && (
-            <Alert color="danger" className="d-flex align-items-center">
-              <i className="ri-error-warning-line me-2 fs-5"></i>
-              <div>{error}</div>
-            </Alert>
-          )}
-
-          {success && (
-            <Alert color="success" className="d-flex align-items-center">
-              <i className="ri-checkbox-circle-line me-2 fs-5"></i>
-              <div>{success}</div>
-            </Alert>
-          )}
+          {error && <Alert color="danger">{error}</Alert>}
+          {success && <Alert color="success">{success}</Alert>}
 
           <ReceiptDocInfo docDate={docDate} setDocDate={setDocDate} />
 
@@ -397,12 +345,10 @@ const ReceiptForm = () => {
           <ReceiptRefSection
             refType={refType}
             setRefType={setRefType}
+            refValues={refValues}
+            updateRefValue={updateRefValue}
             barnamehDate={barnamehDate}
             setBarnamehDate={setBarnamehDate}
-            birthDateDriver={birthDateDriver}
-            setBirthDateDriver={setBirthDateDriver}
-            plate={plate}
-            setPlate={setPlate}
           />
 
           <ReceiptHeader
@@ -410,6 +356,8 @@ const ReceiptForm = () => {
             setBirthDateDriver={setBirthDateDriver}
             dischargeDate={dischargeDate}
             setDischargeDate={setDischargeDate}
+            driver={driver}
+            setDriver={setDriver}
             plate={plate}
             setPlate={setPlate}
           />
@@ -431,19 +379,8 @@ const ReceiptForm = () => {
               size="lg"
               disabled={saving}
               onClick={() => saveReceipt("draft")}
-              className="px-4"
             >
-              {saving ? (
-                <>
-                  <span className="spinner-border spinner-border-sm me-2"></span>
-                  در حال ذخیره...
-                </>
-              ) : (
-                <>
-                  <i className="ri-draft-line me-2"></i>
-                  ثبت موقت
-                </>
-              )}
+              {saving ? "در حال ذخیره..." : "ثبت موقت"}
             </Button>
 
             <Button
@@ -451,19 +388,8 @@ const ReceiptForm = () => {
               size="lg"
               disabled={saving}
               onClick={() => saveReceipt("final")}
-              className="px-4"
             >
-              {saving ? (
-                <>
-                  <span className="spinner-border spinner-border-sm me-2"></span>
-                  در حال ذخیره...
-                </>
-              ) : (
-                <>
-                  <i className="ri-check-double-line me-2"></i>
-                  ثبت قطعی
-                </>
-              )}
+              {saving ? "در حال ذخیره..." : "ثبت قطعی"}
             </Button>
           </div>
         </CardBody>

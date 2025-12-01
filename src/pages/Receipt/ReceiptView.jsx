@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useState, useCallback, useMemo } from "react";
 import {
   Container,
   Row,
@@ -14,6 +14,8 @@ import {
 import { Link, useParams, useNavigate } from "react-router-dom";
 import { get } from "../../helpers/api_helper";
 import moment from "moment-jalaali";
+import PlateDisplay from "../../components/PlateDisplay"; // ✅ کامپوننت جدید پلاک
+import "../../assets/scss/ReceiptView.scss";
 
 const ReceiptView = () => {
   const { id } = useParams();
@@ -23,118 +25,483 @@ const ReceiptView = () => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
 
-  useEffect(() => {
-    loadReceipt();
+  // Custom hook برای استخراج داده‌ها
+  const useReceiptData = (receiptData) => {
+    const driver = useMemo(() => {
+      if (!receiptData?.driver) return null;
+      const d = receiptData.driver;
+      return {
+        name: d.name && d.name.trim() ? d.name : null,
+        nationalId: d.nationalId && d.nationalId.trim() ? d.nationalId : null,
+        birthDate: d.birthDate || null,
+      };
+    }, [receiptData?.driver]);
+
+    const plate = useMemo(() => {
+      if (!receiptData?.plate) return null;
+      const p = receiptData.plate;
+      return {
+        // ✅ Mapping دقیق با PlateDisplay component
+        left2: p.left2 || "",        // کد استان (راست)
+        middle3: p.mid3 || "",       // 3 رقم وسط  
+        letter: p.letter || "",      // حرف وسط
+        right2: p.right2 || "",      // 2 رقم راست
+        iranRight: p.iranRight || "",
+      };
+    }, [receiptData?.plate]);
+
+    const refDoc = useMemo(() => {
+      if (!receiptData?.refDocument) return { refType: "none" };
+      const ref = receiptData.refDocument;
+      return {
+        refType: ref.refType || "none",
+        barnamehNumber: ref.barnamehNumber && ref.barnamehNumber.trim() ? ref.barnamehNumber : null,
+        barnamehDate: ref.barnamehDate || null,
+        barnamehTracking: ref.barnamehTracking && ref.barnamehTracking.trim() ? ref.barnamehTracking : null,
+        pettehNumber: ref.pettehNumber && ref.pettehNumber.trim() ? ref.pettehNumber : null,
+        havaleNumber: ref.havaleNumber && ref.havaleNumber.trim() ? ref.havaleNumber : null,
+        productionNumber: ref.productionNumber && ref.productionNumber.trim() ? ref.productionNumber : null,
+      };
+    }, [receiptData?.refDocument]);
+
+    const finance = useMemo(() => {
+      if (!receiptData?.finance) return null;
+      const fin = receiptData.finance;
+      return {
+        loadCost: fin.loadCost || 0,
+        unloadCost: fin.unloadCost || 0,
+        warehouseCost: fin.warehouseCost || 0,
+        tax: fin.tax || 0,
+        returnFreight: fin.returnFreight || 0,
+        loadingFee: fin.loadingFee || 0,
+        miscCost: fin.miscCost || 0,
+        miscDescription: fin.miscDescription && fin.miscDescription.trim() ? fin.miscDescription : null,
+      };
+    }, [receiptData?.finance]);
+
+    const payment = useMemo(() => {
+      if (!receiptData?.payment) return null;
+      const pay = receiptData.payment;
+      return {
+        paymentBy: pay.paymentBy || null,
+        cardNumber: pay.cardNumber && pay.cardNumber.trim() ? pay.cardNumber : null,
+        accountNumber: pay.accountNumber && pay.accountNumber.trim() ? pay.accountNumber : null,
+        bankName: pay.bankName && pay.bankName.trim() ? pay.bankName : null,
+        ownerName: pay.ownerName && pay.ownerName.trim() ? pay.ownerName : null,
+        trackingCode: pay.trackingCode && pay.trackingCode.trim() ? pay.trackingCode : null,
+      };
+    }, [receiptData?.payment]);
+
+    const activeColumns = useMemo(() => {
+      if (!receiptData?.items || receiptData.items.length === 0) {
+        return [allPossibleColumns[0]];
+      }
+      return allPossibleColumns.filter((col) => {
+        if (col.key === "rowNumber") return true;
+        return hasDataInPath(receiptData.items, col.path, col.isCheckbox);
+      });
+    }, [receiptData?.items]);
+
+    return { driver, plate, refDoc, finance, payment, activeColumns };
+  };
+
+  // بارگذاری داده‌ها با useCallback
+  const loadReceipt = useCallback(async () => {
+    setLoading(true);
+    setError("");
+
+    console.log("🔍 Loading receipt with ID:", id);
+
+    try {
+      const res = await get(`/receipts/${id}?depth=3`);
+      console.log("✅ Receipt loaded:", res);
+      setReceipt(res);
+    } catch (err) {
+      console.error("❌ Error loading receipt:", err);
+      setError(err.response?.data?.message || err.message || "خطا در دریافت اطلاعات رسید");
+    } finally {
+      setLoading(false);
+    }
   }, [id]);
 
+  useEffect(() => {
+    loadReceipt();
+  }, [loadReceipt]);
 
-const loadReceipt = async () => {
-  setLoading(true);
-  setError("");
-
-  console.log("🔍 Loading receipt with ID:", id);
-
-  try {
-    // ✅ اول receipt رو با depth=2 بگیر
-    const res = await get(`/receipts/${id}?depth=2`);
-    console.log("✅ Receipt loaded:", res);
-    console.log("📦 Items raw:", res.items);
-
-    // ✅ بررسی و دریافت جزئیات items
-    if (res.items && Array.isArray(res.items) && res.items.length > 0) {
-      const firstItem = res.items[0];
-
-      // اگر items آرایه‌ای از ID ها باشد (number یا string)
-      if (typeof firstItem === 'number' || typeof firstItem === 'string') {
-        console.log("📦 Items are IDs, trying alternative methods...");
-        
-        // ✅ روش 1: امتحان depth=3
-        try {
-          console.log("📦 Trying depth=3...");
-          const detailedReceipt = await get(`/receipts/${id}?depth=3`);
-          if (detailedReceipt.items && typeof detailedReceipt.items[0] === 'object') {
-            console.log("✅ Items loaded via depth=3");
-            res.items = detailedReceipt.items;
-          } else {
-            throw new Error("depth=3 didn't help");
-          }
-        } catch (depthErr) {
-          console.log("❌ depth=3 failed:", depthErr.message);
-          
-          // ✅ روش 2: امتحان /receipts/:id/items
-          try {
-            console.log("📦 Trying /receipts/:id/items...");
-            const itemsResponse = await get(`/receipts/${id}/items`);
-            res.items = itemsResponse.docs || itemsResponse;
-            console.log("✅ Items loaded via /receipts/:id/items");
-          } catch (itemsErr) {
-            console.log("❌ /receipts/:id/items failed:", itemsErr.message);
-            
-            // ✅ روش 3: امتحان query items با where
-            try {
-              console.log("📦 Trying query with where...");
-              const itemsQuery = await get(`/receiptitems?where[receipt][equals]=${id}`);
-              res.items = itemsQuery.docs || [];
-              console.log("✅ Items loaded via query:", res.items);
-            } catch (queryErr) {
-              console.log("❌ Query failed:", queryErr.message);
-              console.log("⚠️ All methods failed - keeping items as IDs");
-              // در صورت خطا در همه روش‌ها، items رو خالی می‌کنیم
-              res.items = [];
-            }
-          }
-        }
-      } else {
-        console.log("✅ Items already populated as objects");
-      }
-    } else {
-      console.log("📦 No items found");
-    }
-
-    console.log("📦 Final receipt:", res);
-    setReceipt(res);
-  } catch (err) {
-    console.error("❌ Error loading receipt:", err);
-    setError(err.response?.data?.message || "خطا در دریافت اطلاعات رسید");
-  }
-
-  setLoading(false);
-};
-
-
-  const formatDate = (date) => {
+  // Helper functions
+  const formatDate = useCallback((date) => {
     if (!date) return "-";
     return moment(date).format("jYYYY/jMM/jDD");
-  };
+  }, []);
 
-  const formatNumber = (num) => {
-    if (!num) return "0";
+  const formatDateTime = useCallback((date) => {
+    if (!date) return "-";
+    return moment(date).format("jYYYY/jMM/jDD - HH:mm");
+  }, []);
+
+  const formatNumber = useCallback((num) => {
+    if (!num && num !== 0) return "0";
     return new Intl.NumberFormat("fa-IR").format(num);
-  };
+  }, []);
 
-  const getStatusBadge = (status) => {
+  const getStatusBadge = useCallback((status) => {
     if (status === "final") {
       return <Badge color="success">ثبت قطعی</Badge>;
     } else if (status === "draft") {
       return <Badge color="warning">پیش‌نویس</Badge>;
     }
     return <Badge color="secondary">نامشخص</Badge>;
-  };
+  }, []);
 
-  const formatPlate = (plate) => {
-    if (!plate || !plate.iranRight) return "-";
-    return `${plate.iranRight || ""} | ${plate.mid3 || ""} ${plate.letter || ""} ${plate.left2 || ""}`;
-  };
+  const hasPlateData = useCallback((plate) => {
+    if (!plate) return false;
+    const hasData = (
+      (plate.left2 && plate.left2.trim() !== "") ||
+      (plate.middle3 && plate.middle3.trim() !== "") ||
+      (plate.letter && plate.letter.trim() !== "") ||
+      (plate.right2 && plate.right2.trim() !== "")
+    );
+    return hasData;
+  }, []);
 
-  const printReceipt = () => {
+  const getProductionTypeLabel = useCallback((type) => {
+    if (type === "domestic") return "داخلی";
+    if (type === "import") return "وارداتی";
+    return "-";
+  }, []);
+
+  const getRefTypeLabel = useCallback((refType) => {
+    const labels = {
+      none: "بدون مرجع",
+      barnameh: "بارنامه",
+      petteh: "پته گمرکی",
+      havale: "حواله سامانه جامع",
+      production: "اظهار تولید",
+    };
+    return labels[refType] || "-";
+  }, []);
+
+  const hasRefDocument = useCallback(() => {
+    const ref = receipt?.refDocument;
+    if (!ref || !ref.refType || ref.refType === "none") return false;
+
+    switch (ref.refType) {
+      case "barnameh":
+        return !!(ref.barnamehNumber || ref.barnamehDate || ref.barnamehTracking);
+      case "petteh":
+        return !!ref.pettehNumber;
+      case "havale":
+        return !!ref.havaleNumber;
+      case "production":
+        return !!ref.productionNumber;
+      default:
+        return false;
+    }
+  }, [receipt?.refDocument]);
+
+  const hasDriverOrPlateData = useCallback(() => {
+    const driverData = receipt?.driver;
+    const plateData = receipt?.plate;
+    return !!(
+      driverData?.name?.trim() ||
+      driverData?.nationalId?.trim() ||
+      driverData?.birthDate ||
+      hasPlateData(plateData)
+    );
+  }, [receipt?.driver, receipt?.plate, hasPlateData]);
+
+  const allPossibleColumns = [
+    {
+      key: "rowNumber",
+      label: "ردیف",
+      path: null,
+      className: "text-center",
+      width: "40px",
+    },
+    { key: "row", label: "ردیف کالا", path: "row", className: "text-center", width: "60px" },
+    {
+      key: "product",
+      label: "نام کالا",
+      path: "product.name",
+      className: "fw-bold",
+    },
+    {
+      key: "productCategory",
+      label: "گروه",
+      path: "product.category.name",
+      className: "",
+    },
+    {
+      key: "unit",
+      label: "واحد",
+      path: "product.unit",
+      className: "text-center",
+      width: "60px",
+    },
+    {
+      key: "nationalProductId",
+      label: "کد ملی",
+      path: "national_product_id",
+      width: "80px",
+    },
+    {
+      key: "productDescription",
+      label: "شرح کالا",
+      path: "product_description",
+    },
+    { key: "count", label: "تعداد", path: "count", className: "text-center", width: "60px" },
+    {
+      key: "productionType",
+      label: "نوع",
+      path: "productionType",
+      className: "text-center",
+      width: "60px",
+    },
+    {
+      key: "isUsed",
+      label: "مستعمل",
+      path: "isUsed",
+      className: "text-center",
+      width: "60px",
+      isCheckbox: true,
+    },
+    {
+      key: "isDefective",
+      label: "معیوب",
+      path: "isDefective",
+      className: "text-center",
+      width: "60px",
+      isCheckbox: true,
+    },
+    {
+      key: "fullWeight",
+      label: "وزن پر",
+      path: "weights.fullWeight",
+      className: "text-end",
+      width: "80px",
+    },
+    {
+      key: "emptyWeight",
+      label: "وزن خالی",
+      path: "weights.emptyWeight",
+      className: "text-end",
+      width: "80px",
+    },
+    {
+      key: "netWeight",
+      label: "وزن خالص",
+      path: "weights.netWeight",
+      className: "text-end",
+      width: "80px",
+    },
+    {
+      key: "originWeight",
+      label: "وزن مبدا",
+      path: "weights.originWeight",
+      className: "text-end",
+      width: "80px",
+    },
+    {
+      key: "weightDiff",
+      label: "اختلاف",
+      path: "weights.weightDiff",
+      className: "text-end",
+      width: "80px",
+    },
+    {
+      key: "length",
+      label: "طول",
+      path: "dimensions.length",
+      className: "text-center",
+      width: "60px",
+    },
+    {
+      key: "width",
+      label: "عرض",
+      path: "dimensions.width",
+      className: "text-center",
+      width: "60px",
+    },
+    {
+      key: "thickness",
+      label: "ضخامت",
+      path: "dimensions.thickness",
+      className: "text-center",
+      width: "60px",
+    },
+    { key: "heatNumber", label: "Heat No", path: "heatNumber", width: "80px" },
+    { key: "bundleNo", label: "بسته", path: "bundleNo", width: "70px" },
+    { key: "brand", label: "برند", path: "brand", width: "80px" },
+    { key: "orderNo", label: "سفارش", path: "orderNo", width: "80px" },
+    { key: "depoLocation", label: "دپو", path: "depoLocation", width: "80px" },
+    { key: "descriptionNotes", label: "توضیحات", path: "descriptionNotes" },
+  ];
+
+  const hasDataInPath = useCallback((items, path, isCheckbox = false) => {
+    if (!items || items.length === 0) return false;
+
+    return items.some((item) => {
+      if (!path) return true;
+
+      const fields = path.split('.');
+      let value = item;
+
+      for (const field of fields) {
+        if (value && typeof value === 'object' && field in value) {
+          value = value[field];
+        } else {
+          return false;
+        }
+      }
+
+      if (value === null || value === undefined) return false;
+      
+      if (isCheckbox) return value === true;
+      
+      if (typeof value === "boolean") return true;
+      if (typeof value === "number") return value !== 0;
+      if (typeof value === "string") return value.trim() !== "";
+      if (typeof value === "object" && value !== null) return true;
+
+      return false;
+    });
+  }, []);
+
+  const getCellValue = useCallback((item, column) => {
+    if (column.key === "rowNumber") return null;
+
+    if (column.key === "product") {
+      if (typeof item.product === 'object' && item.product !== null) {
+        return item.product.name || "-";
+      }
+      return "-";
+    }
+
+    if (column.key === "productCategory") {
+      if (typeof item.product === 'object' && item.product !== null) {
+        if (typeof item.product.category === 'object' && item.product.category !== null) {
+          return item.product.category.name || "-";
+        }
+        return item.product.category || "-";
+      }
+      return "-";
+    }
+
+    if (column.key === "unit") {
+      if (typeof item.product === 'object' && item.product !== null) {
+        const unit = item.product.unit;
+        if (typeof unit === 'object' && unit !== null) {
+          return unit.name || unit.symbol || "-";
+        }
+        return unit || "-";
+      }
+      return "-";
+    }
+
+    if (column.key === "productionType") {
+      return getProductionTypeLabel(item.productionType);
+    }
+
+    if (column.key === "isUsed" || column.key === "isDefective") {
+      const value = item[column.key];
+      return value ? (
+        <span className="text-success fw-bold" aria-label="بله">✓</span>
+      ) : (
+        <span className="text-muted" aria-label="خیر">-</span>
+      );
+    }
+
+    const fields = column.path.split('.');
+    let value = item;
+
+    for (const field of fields) {
+      if (value && typeof value === 'object' && field in value) {
+        value = value[field];
+      } else {
+        value = null;
+        break;
+      }
+    }
+
+    if (typeof value === "number") return formatNumber(value);
+    if (typeof value === "string" && value.trim()) return value;
+
+    return "-";
+  }, [formatNumber, getProductionTypeLabel]);
+
+  const getColumnTotal = useCallback((column, items) => {
+    if (!items || items.length === 0) return null;
+
+    const numericColumns = [
+      "count", "fullWeight", "emptyWeight", "netWeight", 
+      "originWeight", "weightDiff", "length", "width", "thickness"
+    ];
+
+    if (!numericColumns.includes(column.key)) return null;
+
+    const total = items.reduce((sum, item) => {
+      const fields = column.path.split('.');
+      let value = item;
+
+      for (const field of fields) {
+        if (value && typeof value === 'object' && field in value) {
+          value = value[field];
+        } else {
+          return sum;
+        }
+      }
+
+      return sum + (typeof value === "number" ? value : 0);
+    }, 0);
+
+    return total;
+  }, []);
+
+  const calculateTotalCost = useCallback((financeData) => {
+    if (!financeData) return 0;
+    return (
+      (financeData.loadCost || 0) +
+      (financeData.unloadCost || 0) +
+      (financeData.warehouseCost || 0) +
+      (financeData.tax || 0) +
+      (financeData.returnFreight || 0) +
+      (financeData.loadingFee || 0) +
+      (financeData.miscCost || 0)
+    );
+  }, []);
+
+  const printReceipt = useCallback(() => {
     window.print();
-  };
+  }, []);
 
+  const getReceiptUrl = useCallback(() => {
+    return `${window.location.origin}/receipts/view/${id}`;
+  }, [id]);
+
+  const QRCode = useCallback(({ value, size = 100 }) => {
+    const qrUrl = `https://api.qrserver.com/v1/create-qr-code/?size=${size}x${size}&data=${encodeURIComponent(value)}`;
+    return (
+      <div className="qr-code-box" role="img" aria-label="کد QR رسید">
+        <img src={qrUrl} alt="QR Code" style={{ width: size, height: size }} />
+        <div className="qr-text">اسکن کنید</div>
+      </div>
+    );
+  }, []);
+
+  // استفاده از custom hook
+  const { driver, plate, refDoc, finance, payment, activeColumns } = useReceiptData(receipt);
+  const columnCount = activeColumns.length;
+  const tableClass = 
+    columnCount > 8 ? "table items-table very-many-columns" :
+    columnCount > 6 ? "table items-table many-columns" :
+    "table items-table";
+
+  // Loading State
   if (loading) {
     return (
       <div className="page-content">
         <Container fluid>
-          <div className="text-center py-5">
+          <div className="text-center py-5" role="status" aria-live="polite">
             <Spinner color="primary" />
             <div className="mt-3">
               <h5 className="text-muted">در حال بارگذاری...</h5>
@@ -145,16 +512,21 @@ const loadReceipt = async () => {
     );
   }
 
+  // Error State
   if (error) {
     return (
       <div className="page-content">
         <Container fluid>
           <Alert color="danger" className="d-flex align-items-center">
-            <i className="mdi mdi-block-helper me-2"></i>
+            <i className="mdi mdi-block-helper me-2" aria-hidden="true"></i>
             <div>{error}</div>
           </Alert>
-          <Button color="primary" onClick={() => navigate("/receipts")}>
-            <i className="bx bx-arrow-back me-1"></i>
+          <Button 
+            color="primary" 
+            onClick={() => navigate("/receipts")}
+            aria-label="بازگشت به لیست رسیدها"
+          >
+            <i className="bx bx-arrow-back me-1" aria-hidden="true"></i>
             بازگشت به لیست
           </Button>
         </Container>
@@ -166,9 +538,15 @@ const loadReceipt = async () => {
     return (
       <div className="page-content">
         <Container fluid>
-          <Alert color="warning">رسید یافت نشد</Alert>
-          <Button color="primary" onClick={() => navigate("/receipts")}>
-            <i className="bx bx-arrow-back me-1"></i>
+          <Alert color="warning" role="alert">
+            رسید یافت نشد
+          </Alert>
+          <Button 
+            color="primary" 
+            onClick={() => navigate("/receipts")}
+            aria-label="بازگشت به لیست رسیدها"
+          >
+            <i className="bx bx-arrow-back me-1" aria-hidden="true"></i>
             بازگشت به لیست
           </Button>
         </Container>
@@ -179,8 +557,7 @@ const loadReceipt = async () => {
   return (
     <div className="page-content">
       <Container fluid>
-        {/* Breadcrumb */}
-        <div className="page-title-box d-sm-flex align-items-center justify-content-between">
+        <div className="page-title-box d-sm-flex align-items-center justify-content-between print-hide">
           <h4 className="mb-sm-0 font-size-18">جزئیات رسید</h4>
 
           <div className="page-title-right">
@@ -191,443 +568,460 @@ const loadReceipt = async () => {
               <li className="breadcrumb-item">
                 <Link to="/receipts">رسیدها</Link>
               </li>
-              <li className="breadcrumb-item active">جزئیات رسید</li>
+              <li className="breadcrumb-item active" aria-current="page">جزئیات رسید</li>
             </ol>
           </div>
         </div>
 
-        <Row>
-          <Col lg={12}>
-            <Card>
-              <CardBody>
-                {/* Header */}
-                <div className="d-flex flex-wrap align-items-center justify-content-between mb-4 print-hide">
-                  <div>
-                    <h4 className="card-title mb-1">
-                      رسید شماره #{receipt.receiptNo || receipt.id}
-                    </h4>
-                    <p className="card-title-desc mb-0">
-                      مشاهده جزئیات کامل رسید ورود کالا
-                    </p>
-                  </div>
+        <div className="d-flex flex-wrap gap-2 mb-3 print-hide">
+          <Button 
+            color="light" 
+            onClick={() => navigate("/receipts")}
+            aria-label="بازگشت به لیست"
+          >
+            <i className="bx bx-arrow-back me-1" aria-hidden="true"></i>
+            بازگشت
+          </Button>
 
-                  <div className="d-flex flex-wrap gap-2">
-                    <Button color="light" onClick={() => navigate("/receipts")}>
-                      <i className="bx bx-arrow-back me-1"></i>
-                      بازگشت
-                    </Button>
+          <Button 
+            color="info" 
+            onClick={printReceipt}
+            aria-label="چاپ رسید"
+          >
+            <i className="bx bx-printer me-1" aria-hidden="true"></i>
+            چاپ
+          </Button>
 
-                    <Button color="info" onClick={printReceipt}>
-                      <i className="bx bx-printer me-1"></i>
-                      چاپ
-                    </Button>
+          <Link
+            to={`/receipts/edit/${receipt.id}`}
+            className="btn btn-primary"
+            aria-label="ویرایش رسید"
+          >
+            <i className="bx bx-edit-alt me-1" aria-hidden="true"></i>
+            ویرایش
+          </Link>
+        </div>
 
-                    <Link
-                      to={`/receipts/edit/${receipt.id}`}
-                      className="btn btn-primary"
-                    >
-                      <i className="bx bx-edit-alt me-1"></i>
-                      ویرایش
-                    </Link>
+        <div className="receipt-print-wrapper">
+          <Card className="receipt-card mb-3">
+            <CardBody>
+              <div className="receipt-header">
+                <div className="header-content">
+                  <h3 className="receipt-title">رسید انبار</h3>
+                  <div className="receipt-info">
+                    <span><strong>شماره:</strong> {receipt.receiptNo || receipt.receipt_no || receipt.id}</span>
+                    <span className="mx-2">|</span>
+                    <span><strong>تاریخ:</strong> {formatDate(receipt.docDate || receipt.doc_date)}</span>
+                    <span className="mx-2">|</span>
+                    {getStatusBadge(receipt.status)}
                   </div>
                 </div>
+                <div className="header-qr">
+                  <QRCode value={getReceiptUrl()} size={90} />
+                </div>
+              </div>
+            </CardBody>
+          </Card>
 
-                {/* Receipt Info */}
-                <Row className="mb-4">
-                  <Col md={6}>
-                    <div className="mb-3">
-                      <h5 className="font-size-15 mb-3">اطلاعات اصلی</h5>
+          <Row>
+            <Col md={hasRefDocument() ? 6 : 12} className="mb-3">
+              <Card className="receipt-card h-100">
+                <CardBody>
+                  <h6 className="section-title">
+                    <i className="ri-user-line me-2" aria-hidden="true"></i>
+                    اطلاعات طرفین
+                  </h6>
+                  <table className="detail-table" role="table" aria-label="اطلاعات طرفین">
+                    <tbody>
+                      <tr>
+                        <th scope="row">مالک:</th>
+                        <td>{receipt.owner?.name || receipt.owner?.full_name || "-"}</td>
+                      </tr>
+                      <tr>
+                        <th scope="row">تحویل دهنده:</th>
+                        <td>{receipt.deliverer?.name || receipt.deliverer?.full_name || "-"}</td>
+                      </tr>
+                      <tr>
+                        <th scope="row">ثبت کننده:</th>
+                        <td>{receipt.member?.full_name || receipt.member?.name || "-"}</td>
+                      </tr>
+                      <tr className="print-hide">
+                        <th scope="row">تاریخ ثبت:</th>
+                        <td>{formatDateTime(receipt.createdAt || receipt.created_at)}</td>
+                      </tr>
+                    </tbody>
+                  </table>
+                </CardBody>
+              </Card>
+            </Col>
 
-                      <div className="table-responsive">
-                        <table className="table table-borderless table-sm mb-0">
-                          <tbody>
-                            <tr>
-                              <td className="text-muted" style={{ width: "40%" }}>
-                                شماره رسید:
-                              </td>
-                              <td className="fw-medium">
-                                <Badge color="primary" pill>
-                                  #{receipt.receiptNo || receipt.id}
-                                </Badge>
-                              </td>
-                            </tr>
-                            <tr>
-                              <td className="text-muted">تاریخ سند:</td>
-                              <td className="fw-medium">
-                                {formatDate(receipt.docDate)}
-                              </td>
-                            </tr>
-                            <tr>
-                              <td className="text-muted">وضعیت:</td>
-                              <td>{getStatusBadge(receipt.status)}</td>
-                            </tr>
-                            <tr>
-                              <td className="text-muted">ثبت کننده:</td>
-                              <td className="fw-medium">
-                                {receipt.member?.full_name ||
-                                  receipt.member?.name ||
-                                  "-"}
-                              </td>
-                            </tr>
-                          </tbody>
-                        </table>
-                      </div>
-                    </div>
-                  </Col>
-
-                  <Col md={6}>
-                    <div className="mb-3">
-                      <h5 className="font-size-15 mb-3">اطلاعات مالک و تحویل دهنده</h5>
-
-                      <div className="table-responsive">
-                        <table className="table table-borderless table-sm mb-0">
-                          <tbody>
-                            <tr>
-                              <td className="text-muted" style={{ width: "40%" }}>
-                                مالک:
-                              </td>
-                              <td className="fw-medium">
-                                {receipt.owner?.name ||
-                                  receipt.owner?.full_name ||
-                                  "-"}
-                              </td>
-                            </tr>
-                            {receipt.owner?.mobile && (
-                              <tr>
-                                <td className="text-muted">موبایل مالک:</td>
-                                <td className="fw-medium">
-                                  {receipt.owner.mobile}
-                                </td>
-                              </tr>
-                            )}
-                            <tr>
-                              <td className="text-muted">تحویل دهنده:</td>
-                              <td className="fw-medium">
-                                {receipt.deliverer?.name ||
-                                  receipt.deliverer?.full_name ||
-                                  "-"}
-                              </td>
-                            </tr>
-                            {receipt.deliverer?.mobile && (
-                              <tr>
-                                <td className="text-muted">موبایل تحویل دهنده:</td>
-                                <td className="fw-medium">
-                                  {receipt.deliverer.mobile}
-                                </td>
-                              </tr>
-                            )}
-                          </tbody>
-                        </table>
-                      </div>
-                    </div>
-                  </Col>
-                </Row>
-
-                {/* Driver & Plate */}
-                {(receipt.driver?.name || receipt.plate?.iranRight) && (
-                  <Row className="mb-4">
-                    <Col md={6}>
-                      {receipt.driver?.name && (
-                        <div className="mb-3">
-                          <h5 className="font-size-15 mb-3">اطلاعات راننده</h5>
-
-                          <div className="table-responsive">
-                            <table className="table table-borderless table-sm mb-0">
-                              <tbody>
-                                <tr>
-                                  <td className="text-muted" style={{ width: "40%" }}>
-                                    نام راننده:
-                                  </td>
-                                  <td className="fw-medium">
-                                    {receipt.driver.name}
-                                  </td>
-                                </tr>
-                                {receipt.driver.nationalId && (
-                                  <tr>
-                                    <td className="text-muted">کد ملی:</td>
-                                    <td className="fw-medium">
-                                      {receipt.driver.nationalId}
-                                    </td>
-                                  </tr>
-                                )}
-                                {receipt.driver.birthDate && (
-                                  <tr>
-                                    <td className="text-muted">تاریخ تولد:</td>
-                                    <td className="fw-medium">
-                                      {formatDate(receipt.driver.birthDate)}
-                                    </td>
-                                  </tr>
-                                )}
-                              </tbody>
-                            </table>
-                          </div>
-                        </div>
-                      )}
-                    </Col>
-
-                    <Col md={6}>
-                      {receipt.plate?.iranRight && (
-                        <div className="mb-3">
-                          <h5 className="font-size-15 mb-3">پلاک خودرو</h5>
-
-                          <div className="table-responsive">
-                            <table className="table table-borderless table-sm mb-0">
-                              <tbody>
-                                <tr>
-                                  <td className="text-muted" style={{ width: "40%" }}>
-                                    پلاک:
-                                  </td>
-                                  <td className="fw-medium">
-                                    {formatPlate(receipt.plate)}
-                                  </td>
-                                </tr>
-                              </tbody>
-                            </table>
-                          </div>
-                        </div>
-                      )}
-                    </Col>
-                  </Row>
-                )}
-
-                {/* Items Table */}
-                <div className="mb-4">
-                  <h5 className="font-size-15 mb-3">اقلام کالا</h5>
-
-                  <div className="table-responsive">
-                    <Table className="table table-bordered table-hover align-middle mb-0">
-                      <thead className="table-light">
-                        <tr>
-                          <th style={{ width: "50px" }}>#</th>
-                          <th>گروه کالا</th>
-                          <th>نام کالا</th>
-                          <th>تعداد</th>
-                          <th>واحد</th>
-                          <th>وزن خالص</th>
-                          <th>ابعاد</th>
-                        </tr>
-                      </thead>
+            {hasRefDocument() && (
+              <Col md={6} className="mb-3">
+                <Card className="receipt-card h-100">
+                  <CardBody>
+                    <h6 className="section-title">
+                      <i className="ri-file-copy-line me-2" aria-hidden="true"></i>
+                      سند مرجع
+                    </h6>
+                    <table className="detail-table" role="table" aria-label="اطلاعات سند مرجع">
                       <tbody>
-                        {receipt.items && receipt.items.length > 0 ? (
-                          receipt.items.map((item, index) => (
-                            <tr key={item.id || index}>
-                              <td>{index + 1}</td>
-                              <td>{item.group || "-"}</td>
-                              <td className="fw-medium">{item.description || "-"}</td>
-                              <td>{formatNumber(item.count)}</td>
-                              <td>{item.unit || "-"}</td>
-                              <td>
-                                {item.weights?.netWeight
-                                  ? formatNumber(item.weights.netWeight) + " کیلوگرم"
-                                  : "-"}
-                              </td>
-                              <td>
-                                {item.dimensions?.length &&
-                                item.dimensions?.width &&
-                                item.dimensions?.thickness
-                                  ? `${item.dimensions.length} × ${item.dimensions.width} × ${item.dimensions.thickness}`
-                                  : "-"}
-                              </td>
-                            </tr>
-                          ))
-                        ) : (
+                        <tr>
+                          <th scope="row">نوع:</th>
+                          <td>
+                            <Badge color="info">
+                              {getRefTypeLabel(refDoc.refType)}
+                            </Badge>
+                          </td>
+                        </tr>
+                        {refDoc.refType === "barnameh" && (
+                          <>
+                            {refDoc.barnamehNumber && (
+                              <tr>
+                                <th scope="row">شماره بارنامه:</th>
+                                <td>{refDoc.barnamehNumber}</td>
+                              </tr>
+                            )}
+                            {refDoc.barnamehDate && (
+                              <tr>
+                                <th scope="row">تاریخ:</th>
+                                <td>{formatDate(refDoc.barnamehDate)}</td>
+                              </tr>
+                            )}
+                            {refDoc.barnamehTracking && (
+                              <tr>
+                                <th scope="row">کد رهگیری:</th>
+                                <td>{refDoc.barnamehTracking}</td>
+                              </tr>
+                            )}
+                          </>
+                        )}
+                        {refDoc.refType === "petteh" && refDoc.pettehNumber && (
                           <tr>
-                            <td colSpan="7" className="text-center text-muted">
-                              هیچ کالایی ثبت نشده است
-                            </td>
+                            <th scope="row">شماره پته:</th>
+                            <td>{refDoc.pettehNumber}</td>
+                          </tr>
+                        )}
+                        {refDoc.refType === "havale" && refDoc.havaleNumber && (
+                          <tr>
+                            <th scope="row">شماره حواله:</th>
+                            <td>{refDoc.havaleNumber}</td>
+                          </tr>
+                        )}
+                        {refDoc.refType === "production" && refDoc.productionNumber && (
+                          <tr>
+                            <th scope="row">شماره اظهار:</th>
+                            <td>{refDoc.productionNumber}</td>
                           </tr>
                         )}
                       </tbody>
-                    </Table>
-                  </div>
-                </div>
+                    </table>
+                  </CardBody>
+                </Card>
+              </Col>
+            )}
+          </Row>
 
-                {/* Finance Info */}
-                {receipt.finance && (
-                  <Row className="mb-4">
-                    <Col md={6}>
-                      <div className="mb-3">
-                        <h5 className="font-size-15 mb-3">هزینه‌ها</h5>
-
-                        <div className="table-responsive">
-                          <table className="table table-borderless table-sm mb-0">
-                            <tbody>
-                              <tr>
-                                <td className="text-muted" style={{ width: "50%" }}>
-                                  هزینه بارگیری:
-                                </td>
-                                <td className="fw-medium text-end">
-                                  {formatNumber(receipt.finance.loadCost)} تومان
-                                </td>
-                              </tr>
-                              <tr>
-                                <td className="text-muted">هزینه تخلیه:</td>
-                                <td className="fw-medium text-end">
-                                  {formatNumber(receipt.finance.unloadCost)} تومان
-                                </td>
-                              </tr>
-                              <tr>
-                                <td className="text-muted">هزینه انبارداری:</td>
-                                <td className="fw-medium text-end">
-                                  {formatNumber(receipt.finance.warehouseCost)}{" "}
-                                  تومان
-                                </td>
-                              </tr>
-                              <tr>
-                                <td className="text-muted">مالیات:</td>
-                                <td className="fw-medium text-end">
-                                  {formatNumber(receipt.finance.tax)} تومان
-                                </td>
-                              </tr>
-                              <tr>
-                                <td className="text-muted">کرایه برگشت:</td>
-                                <td className="fw-medium text-end">
-                                  {formatNumber(receipt.finance.returnFreight)}{" "}
-                                  تومان
-                                </td>
-                              </tr>
-                              <tr>
-                                <td className="text-muted">دستمزد بارگیری:</td>
-                                <td className="fw-medium text-end">
-                                  {formatNumber(receipt.finance.loadingFee)} تومان
-                                </td>
-                              </tr>
-                              <tr>
-                                <td className="text-muted">سایر هزینه‌ها:</td>
-                                <td className="fw-medium text-end">
-                                  {formatNumber(receipt.finance.miscCost)} تومان
-                                </td>
-                              </tr>
-                              <tr className="border-top">
-                                <td className="fw-bold">جمع کل:</td>
-                                <td className="fw-bold text-end text-primary">
-                                  {formatNumber(
-                                    (receipt.finance.loadCost || 0) +
-                                      (receipt.finance.unloadCost || 0) +
-                                      (receipt.finance.warehouseCost || 0) +
-                                      (receipt.finance.tax || 0) +
-                                      (receipt.finance.returnFreight || 0) +
-                                      (receipt.finance.loadingFee || 0) +
-                                      (receipt.finance.miscCost || 0)
-                                  )}{" "}
-                                  تومان
-                                </td>
-                              </tr>
-                            </tbody>
-                          </table>
-                        </div>
-
-                        {receipt.finance.miscDescription && (
-                          <div className="mt-3">
-                            <small className="text-muted">
-                              شرح سایر هزینه‌ها:
-                            </small>
-                            <p className="mb-0">
-                              {receipt.finance.miscDescription}
-                            </p>
-                          </div>
-                        )}
-                      </div>
+          {hasDriverOrPlateData() && (
+            <Card className="receipt-card mb-3">
+              <CardBody>
+                <h6 className="section-title">
+                  <i className="ri-truck-line me-2" aria-hidden="true"></i>
+                  اطلاعات خودرو و راننده
+                </h6>
+                <Row>
+                  {driver && (driver.name || driver.nationalId || driver.birthDate) && (
+                    <Col md={hasPlateData(plate) ? 6 : 12}>
+                      <table className="detail-table" role="table" aria-label="اطلاعات راننده">
+                        <tbody>
+                          {driver.name && (
+                            <tr>
+                              <th scope="row">نام راننده:</th>
+                              <td>{driver.name}</td>
+                            </tr>
+                          )}
+                          {driver.nationalId && (
+                            <tr>
+                              <th scope="row">کد ملی:</th>
+                              <td>{driver.nationalId}</td>
+                            </tr>
+                          )}
+                          {driver.birthDate && (
+                            <tr>
+                              <th scope="row">تاریخ تولد:</th>
+                              <td>{formatDate(driver.birthDate)}</td>
+                            </tr>
+                          )}
+                        </tbody>
+                      </table>
                     </Col>
-
-                    {/* Payment Info */}
-                    {receipt.payment && (
-                      <Col md={6}>
-                        <div className="mb-3">
-                          <h5 className="font-size-15 mb-3">اطلاعات پرداخت</h5>
-
-                          <div className="table-responsive">
-                            <table className="table table-borderless table-sm mb-0">
-                              <tbody>
-                                <tr>
-                                  <td className="text-muted" style={{ width: "50%" }}>
-                                    پرداخت توسط:
-                                  </td>
-                                  <td className="fw-medium">
-                                    {receipt.payment.paymentBy === "customer"
-                                      ? "مشتری"
-                                      : receipt.payment.paymentBy === "warehouse"
-                                      ? "انبار"
-                                      : "-"}
-                                  </td>
-                                </tr>
-                                {receipt.payment.cardNumber && (
-                                  <tr>
-                                    <td className="text-muted">شماره کارت:</td>
-                                    <td className="fw-medium">
-                                      {receipt.payment.cardNumber}
-                                    </td>
-                                  </tr>
-                                )}
-                                {receipt.payment.accountNumber && (
-                                  <tr>
-                                    <td className="text-muted">شماره حساب:</td>
-                                    <td className="fw-medium">
-                                      {receipt.payment.accountNumber}
-                                    </td>
-                                  </tr>
-                                )}
-                                {receipt.payment.bankName && (
-                                  <tr>
-                                    <td className="text-muted">نام بانک:</td>
-                                    <td className="fw-medium">
-                                      {receipt.payment.bankName}
-                                    </td>
-                                  </tr>
-                                )}
-                                {receipt.payment.ownerName && (
-                                  <tr>
-                                    <td className="text-muted">نام صاحب حساب:</td>
-                                    <td className="fw-medium">
-                                      {receipt.payment.ownerName}
-                                    </td>
-                                  </tr>
-                                )}
-                                {receipt.payment.trackingCode && (
-                                  <tr>
-                                    <td className="text-muted">کد پیگیری:</td>
-                                    <td className="fw-medium">
-                                      {receipt.payment.trackingCode}
-                                    </td>
-                                  </tr>
-                                )}
-                              </tbody>
-                            </table>
-                          </div>
-                        </div>
-                      </Col>
-                    )}
-                  </Row>
-                )}
+                  )}
+                  
+                  {hasPlateData(plate) && (
+                    <Col md={driver && (driver.name || driver.nationalId || driver.birthDate) ? 6 : 12}>
+                      <table className="detail-table" role="table" aria-label="اطلاعات پلاک">
+                        <tbody>
+                          <tr>
+                            <th scope="row">شماره پلاک:</th>
+                            <td>
+                              {/* ✅ PlateDisplay کامپوننت جدید - کاملاً هماهنگ */}
+                              <PlateDisplay 
+                                plateData={plate}
+                                aria-label={`پلاک خودرو: ${plate?.left2 || ''}${plate?.letter || ''}${plate?.middle3 || ''}${plate?.right2 || ''}`}
+                              />
+                            </td>
+                          </tr>
+                        </tbody>
+                      </table>
+                    </Col>
+                  )}
+                </Row>
               </CardBody>
             </Card>
-          </Col>
-        </Row>
-      </Container>
+          )}
 
-      {/* Print Styles */}
-      <style>
-        {`
-          @media print {
-            .print-hide {
-              display: none !important;
-            }
-            
-            body {
-              font-size: 12pt;
-            }
-            
-            .card {
-              border: none !important;
-              box-shadow: none !important;
-            }
-            
-            .table {
-              font-size: 11pt;
-            }
-          }
-        `}
-      </style>
+          <Card className="receipt-card mb-3">
+            <CardBody>
+              <h6 className="section-title">
+                <i className="ri-inbox-line me-2" aria-hidden="true"></i>
+                اقلام کالا
+                <Badge color="primary" className="ms-2">
+                  {receipt.items?.length || 0} قلم
+                </Badge>
+              </h6>
+
+              <div className="table-responsive">
+                <Table 
+                  className={`${tableClass} table-bordered table-sm mb-0`} 
+                  role="table"
+                  aria-label="جدول اقلام کالا"
+                >
+                  <thead>
+                    <tr>
+                      {activeColumns.map((column) => (
+                        <th
+                          key={column.key}
+                          scope="col"
+                          className={column.className}
+                          style={column.width ? { width: column.width } : {}}
+                          aria-label={column.label}
+                        >
+                          {column.label}
+                        </th>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {receipt.items && receipt.items.length > 0 ? (
+                      <>
+                        {receipt.items.map((item, index) => (
+                          <tr key={item.id || index}>
+                            {activeColumns.map((column) => (
+                              <td
+                                key={column.key}
+                                className={column.className}
+                                style={column.width ? { width: column.width } : {}}
+                              >
+                                {column.key === "rowNumber"
+                                  ? index + 1
+                                  : getCellValue(item, column)}
+                              </td>
+                            ))}
+                          </tr>
+                        ))}
+                        <tr className="table-success fw-bold">
+                          {activeColumns.map((column) => {
+                            const total = getColumnTotal(column, receipt.items);
+                            return (
+                              <td
+                                key={column.key}
+                                className={column.className}
+                                style={column.width ? { width: column.width } : {}}
+                              >
+                                {column.key === "rowNumber"
+                                  ? "جمع کل"
+                                  : total !== null
+                                  ? formatNumber(total)
+                                  : ""}
+                              </td>
+                            );
+                          })}
+                        </tr>
+                      </>
+                    ) : (
+                      <tr>
+                        <td colSpan={columnCount} className="text-center text-muted py-4">
+                          اطلاعاتی برای نمایش وجود ندارد
+                        </td>
+                      </tr>
+                    )}
+                  </tbody>
+                </Table>
+              </div>
+            </CardBody>
+          </Card>
+
+          <Row>
+            <Col md={6} className="mb-3">
+              <Card className="receipt-card h-100">
+                <CardBody>
+                  <h6 className="section-title">
+                    <i className="ri-money-dollar-circle-line me-2" aria-hidden="true"></i>
+                    اطلاعات مالی
+                  </h6>
+                  {finance ? (
+                    <>
+                      <table className="detail-table" role="table" aria-label="اطلاعات مالی">
+                        <tbody>
+                          {finance.loadCost > 0 && (
+                            <tr>
+                              <th scope="row">هزینه بارگیری:</th>
+                              <td>{formatNumber(finance.loadCost)} ریال</td>
+                            </tr>
+                          )}
+                          {finance.unloadCost > 0 && (
+                            <tr>
+                              <th scope="row">هزینه باراندازی:</th>
+                              <td>{formatNumber(finance.unloadCost)} ریال</td>
+                            </tr>
+                          )}
+                          {finance.warehouseCost > 0 && (
+                            <tr>
+                              <th scope="row">هزینه انبارداری:</th>
+                              <td>{formatNumber(finance.warehouseCost)} ریال</td>
+                            </tr>
+                          )}
+                          {finance.tax > 0 && (
+                            <tr>
+                              <th scope="row">مالیات:</th>
+                              <td>{formatNumber(finance.tax)} ریال</td>
+                            </tr>
+                          )}
+                          {finance.returnFreight > 0 && (
+                            <tr>
+                              <th scope="row">کرایه برگشت:</th>
+                              <td>{formatNumber(finance.returnFreight)} ریال</td>
+                            </tr>
+                          )}
+                          {finance.loadingFee > 0 && (
+                            <tr>
+                              <th scope="row">حق بارگیری:</th>
+                              <td>{formatNumber(finance.loadingFee)} ریال</td>
+                            </tr>
+                          )}
+                          {finance.miscCost > 0 && (
+                            <tr>
+                              <th scope="row">هزینه متفرقه:</th>
+                              <td>{formatNumber(finance.miscCost)} ریال</td>
+                            </tr>
+                          )}
+                          {finance.miscDescription && (
+                            <tr>
+                              <th scope="row">شرح متفرقه:</th>
+                              <td>{finance.miscDescription}</td>
+                            </tr>
+                          )}
+                        </tbody>
+                      </table>
+                      <div className="total-section mt-3" role="contentinfo">
+                        <div className="total-row">
+                          <span className="fw-bold">جمع کل:</span>
+                          <strong className="text-success fs-5">
+                            {formatNumber(calculateTotalCost(finance))} ریال
+                          </strong>
+                        </div>
+                      </div>
+                    </>
+                  ) : (
+                    <div className="text-muted text-center py-3" role="status">
+                      اطلاعات مالی ثبت نشده است
+                    </div>
+                  )}
+                </CardBody>
+              </Card>
+            </Col>
+
+            <Col md={6} className="mb-3">
+              <Card className="receipt-card h-100">
+                <CardBody>
+                  <h6 className="section-title">
+                    <i className="ri-bank-card-line me-2" aria-hidden="true"></i>
+                    اطلاعات پرداخت
+                  </h6>
+                  {payment ? (
+                    <table className="detail-table" role="table" aria-label="اطلاعات پرداخت">
+                      <tbody>
+                        {payment.paymentBy && (
+                          <tr>
+                            <th scope="row">پرداخت توسط:</th>
+                            <td>
+                              <Badge
+                                color={
+                                  payment.paymentBy === "cash"
+                                    ? "success"
+                                    : payment.paymentBy === "warehouse"
+                                    ? "info"
+                                    : "secondary"
+                                }
+                              >
+                                {payment.paymentBy === "cash"
+                                  ? "نقد"
+                                  : payment.paymentBy === "warehouse"
+                                  ? "انبار"
+                                  : payment.paymentBy}
+                              </Badge>
+                            </td>
+                          </tr>
+                        )}
+                        {payment.cardNumber && (
+                          <tr>
+                            <th scope="row">شماره کارت:</th>
+                            <td>{payment.cardNumber}</td>
+                          </tr>
+                        )}
+                        {payment.accountNumber && (
+                          <tr>
+                            <th scope="row">شماره حساب:</th>
+                            <td>{payment.accountNumber}</td>
+                          </tr>
+                        )}
+                        {payment.bankName && (
+                          <tr>
+                            <th scope="row">نام بانک:</th>
+                            <td>{payment.bankName}</td>
+                          </tr>
+                        )}
+                        {payment.ownerName && (
+                          <tr>
+                            <th scope="row">صاحب حساب:</th>
+                            <td>{payment.ownerName}</td>
+                          </tr>
+                        )}
+                        {payment.trackingCode && (
+                          <tr>
+                            <th scope="row">کد پیگیری:</th>
+                            <td>{payment.trackingCode}</td>
+                          </tr>
+                        )}
+                      </tbody>
+                    </table>
+                  ) : (
+                    <div className="text-muted text-center py-3" role="status">
+                      اطلاعات پرداخت ثبت نشده است
+                    </div>
+                  )}
+                </CardBody>
+              </Card>
+            </Col>
+          </Row>
+
+          <div className="receipt-footer">
+            <div className="footer-left" aria-label="لینک رسید">
+              {getReceiptUrl()}
+            </div>
+            <div className="footer-right">1/1</div>
+          </div>
+        </div>
+      </Container>
     </div>
   );
 };
