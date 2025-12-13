@@ -9,6 +9,9 @@ import { Link } from "react-router-dom";
 
 import defaultAvatar from "../../../assets/images/users/avatar-1.jpg";
 
+import { API_BASE as BASE_URL } from "../../../helpers/api_helper.jsx";
+import { MEDIA_BASE } from "../../../helpers/api_helper.jsx";
+
 const ProfileMenu = () => {
   const [menu, setMenu] = useState(false);
   const [memberInfo, setMemberInfo] = useState(null);
@@ -42,7 +45,7 @@ const ProfileMenu = () => {
       memberInfo?.email ||
       "کاربر";
 
-  // آواتار
+  // تعیین آواتار
   const getAvatar = () => {
     if (!memberInfo) return defaultAvatar;
 
@@ -54,10 +57,9 @@ const ProfileMenu = () => {
 
     if (!img) return defaultAvatar;
 
-    // اگر آدرس نسبی بود
+    // آدرس نسبی → اضافه کردن MEDIA_BASE
     if (img.startsWith("/")) {
-      const BASE_URL = import.meta.env.VITE_API_URL || "https://cms.anbardaranrey.ir";
-      return BASE_URL + img;
+      return MEDIA_BASE + img; // ✔ درست
     }
 
     return img;
@@ -101,7 +103,7 @@ const ProfileMenu = () => {
 
           <Link to="/logout" className="dropdown-item">
             <i className="bx bx-power-off font-size-16 align-middle me-1 text-danger" />
-            <span>خروج</span>
+            خروج
           </Link>
         </DropdownMenu>
       </Dropdown>

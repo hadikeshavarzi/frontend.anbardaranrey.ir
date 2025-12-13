@@ -1,33 +1,49 @@
+// src/components/Receipt/ReceiptOwnerSection.jsx
 import React, { useEffect, useState } from "react";
 import { Card, CardBody, Row, Col, Label, Input } from "reactstrap";
 import Select from "react-select";
-
-import DatePickerWithIcon from "./DatePickerWithIcon";
+import { selectStyles } from "../../components/Styles/selectStyles";
+import DatePickerWithIcon from "../Shared/DatePickerWithIcon";
 import AddCustomerModal from "./AddCustomerModal";
 import { get } from "../../helpers/api_helper";
 
-const ReceiptOwnerSection = ({ deliverer, setDeliverer, owner, setOwner }) => {
-    // ================================
-    // 1) لود مشتری‌ها از API
-    // ================================
+export default function ReceiptOwnerSection({ value, onChange }) {
+    const owner = value.owner || {};
+    const deliverer = value.deliverer || {};
+
+    const update = (field, val) => {
+        onChange({ ...value, [field]: val });
+    };
+
+    const updateOwner = (field, val) => update("owner", { ...owner, [field]: val });
+    const updateDeliverer = (field, val) =>
+        update("deliverer", { ...deliverer, [field]: val });
+
     const [customers, setCustomers] = useState([]);
+    const [loading, setLoading] = useState(false);
+    const [showAdd, setShowAdd] = useState(false);
 
     useEffect(() => {
         loadCustomers();
     }, []);
 
     const loadCustomers = async () => {
+        setLoading(true);
         try {
             const res = await get("/customers?limit=1000");
-            setCustomers(res.docs || []);
-        } catch (err) {
-            console.error("Error loading customers", err);
+            let list = [];
+
+            if (Array.isArray(res.data)) list = res.data;
+            else if (Array.isArray(res)) list = res;
+            else if (Array.isArray(res.docs)) list = res.docs;
+
+            setCustomers(list);
+        } catch (e) {
+            console.error(e);
         }
+        setLoading(false);
     };
 
-    // ================================
-    // گزینه‌های Select مشتری
-    // ================================
     const customerOptions = [
         ...customers.map((c) => ({
             value: c.id,
@@ -37,174 +53,124 @@ const ReceiptOwnerSection = ({ deliverer, setDeliverer, owner, setOwner }) => {
         { value: "add_new", label: "➕ افزودن مشتری جدید", isNew: true },
     ];
 
-    // ================================
-    // حالت مودال مشتری جدید
-    // ================================
-    const [showAddCustomer, setShowAddCustomer] = useState(false);
-    const [newCustomer, setNewCustomer] = useState({
-        customerType: "real",
-        name: "",
-        nationalId: "",
-        mobile: "",
-        phone: "",
-        birthOrRegisterDate: "",
-        postalCode: "",
-        economicCode: "",
-        address: "",
-        description: "",
-    });
-
-    // ================================
-    // انتخاب مشتری برای مالک کالا
-    // ================================
-    const handleSelectOwner = (selected) => {
-        if (!selected) return;
-
-        if (selected.isNew) {
-            setShowAddCustomer(true);
+    const handleSelect = (type, selected) => {
+        if (!selected) {
+            update(type, {});
             return;
         }
-
-        const data = selected.full;
-
-        setOwner({
-            id: data.id,
-            name: data.name,
-            nationalId: data.nationalId,
-            birthDate: data.birthOrRegisterDate,
-            mobile: data.mobile,
+        if (selected.isNew) {
+            setShowAdd(true);
+            return;
+        }
+        const c = selected.full;
+        update(type, {
+            id: c.id,
+            name: c.name,
+            nationalId: c.national_id,
+            mobile: c.mobile,
+            birthDate: c.birth_or_register_date,
         });
     };
 
-    // ================================
-    // ذخیره مشتری جدید در لیست + انتخاب آن
-    // ================================
-    const handleAddCustomer = (savedCustomer) => {
-        setCustomers((prev) => [...prev, savedCustomer]);
+    const handleNewCustomer = (saved) => {
+        setCustomers((prev) => [...prev, saved]);
 
-        setOwner({
-            id: savedCustomer.id,
-            name: savedCustomer.name,
-            nationalId: savedCustomer.nationalId,
-            birthDate: savedCustomer.birthOrRegisterDate,
-            mobile: savedCustomer.mobile,
+        update("owner", {
+            id: saved.id,
+            name: saved.name,
+            nationalId: saved.national_id,
+            mobile: saved.mobile,
+            birthDate: saved.birth_or_register_date,
         });
 
-        setShowAddCustomer(false);
-    };
-
-    // ================================
-    // انتخاب مشتری برای تحویل‌دهنده
-    // ================================
-    const handleSelectDeliverer = (selected) => {
-        if (!selected) return;
-
-        if (selected.isNew) {
-            setShowAddCustomer(true);
-            return;
-        }
-
-        const data = selected.full;
-
-        setDeliverer({
-            id: data.id,
-            name: data.name,
-            nationalId: data.nationalId,
-            birthDate: data.birthOrRegisterDate,
-            mobile: data.mobile,
-        });
+        setShowAdd(false);
     };
 
     return (
         <>
-            {/* ======================================
-                کارت مالک کالا
-            ======================================= */}
+            {/* مالک */}
             <Card className="mb-3 receipt-card">
                 <div className="receipt-card-header">
-                    <div className="title">
-                        <i className="ri-user-star-line me-2"></i>
-                        اطلاعات مالک کالا
-                    </div>
-                    <div className="subtitle">صاحب اصلی کالا در رسید انبار</div>
+                    <div className="title"><i className="ri-user-star-line me-2"></i>مالک کالا</div>
+                    <div className="subtitle">صاحب اصلی کالا</div>
                 </div>
 
                 <CardBody>
-                    <Row>
-                        {/* Select مشتری با سرچ */}
+                    <Row className="gy-3">
+
                         <Col md="4">
-                            <Label>انتخاب مشتری *</Label>
+                            <Label className="fw-bold">انتخاب مشتری *</Label>
                             <Select
-                                options={customerOptions}
-                                value={
-                                    owner.id
-                                        ? customerOptions.find((o) => o.value === owner.id)
-                                        : null
-                                }
-                                onChange={handleSelectOwner}
-                                placeholder="جستجو یا انتخاب مشتری..."
-                                isSearchable
-                                classNamePrefix="customer-select"
+                                styles={selectStyles}
+                                isLoading={loading}
+                                isClearable
+                                placeholder="انتخاب..."
                                 menuPortalTarget={document.body}
-                                menuPosition="fixed"
-                                styles={{
-                                    menuPortal: (base) => ({ ...base, zIndex: 9999 }),
-                                }}
+                                value={owner.id ? customerOptions.find(o => o.value === owner.id) : null}
+                                onChange={(s) => handleSelect("owner", s)}
+                                options={customerOptions}
                             />
                         </Col>
 
                         <Col md="4">
-                            <Label>کد ملی *</Label>
+                            <Label className="fw-bold">نام / شرکت *</Label>
+                            <Input
+                                value={owner.name || ""}
+                                onChange={(e) => updateOwner("name", e.target.value)}
+                            />
+                        </Col>
+
+                        <Col md="4">
+                            <Label className="fw-bold">کد ملی *</Label>
                             <Input
                                 value={owner.nationalId || ""}
-                                onChange={(e) =>
-                                    setOwner({ ...owner, nationalId: e.target.value })
-                                }
+                                maxLength={11}
+                                onChange={(e) => updateOwner("nationalId", e.target.value)}
+                            />
+                        </Col>
+                    </Row>
+
+                    <Row className="gy-3 mt-1">
+                        <Col md="4">
+                            <Label>تاریخ تولد / ثبت</Label>
+                            <DatePickerWithIcon
+                                value={owner.birthDate}
+                                onChange={(v) => updateOwner("birthDate", v)}
                             />
                         </Col>
 
                         <Col md="4">
-                            <Label>تاریخ تولد</Label>
-                            <DatePickerWithIcon
-                                value={owner.birthDate}
-                                onChange={(v) =>
-                                    setOwner({ ...owner, birthDate: v })
-                                }
+                            <Label>موبایل</Label>
+                            <Input
+                                value={owner.mobile || ""}
+                                maxLength={11}
+                                onChange={(e) => updateOwner("mobile", e.target.value)}
                             />
                         </Col>
                     </Row>
                 </CardBody>
             </Card>
 
-            {/* ======================================
-                کارت تحویل‌دهنده
-            ======================================= */}
+            {/* تحویل‌دهنده */}
             <Card className="mb-3 receipt-card">
                 <div className="receipt-card-header">
-                    <div className="title">
-                        <i className="ri-user-received-2-line me-2"></i>
-                        اطلاعات تحویل‌دهنده
-                    </div>
-                    <div className="subtitle">شخص یا شرکت تحویل‌دهنده کالا</div>
+                    <div className="title"><i className="ri-user-received-2-line me-2"></i>تحویل‌دهنده</div>
+                    <div className="subtitle">در صورت تفاوت با مالک</div>
                 </div>
 
                 <CardBody>
-                    <Row>
+                    <Row className="gy-3">
                         <Col md="4">
                             <Label>انتخاب مشتری</Label>
                             <Select
-                                options={customerOptions}
-                                value={
-                                    deliverer.id
-                                        ? customerOptions.find((o) => o.value === deliverer.id)
-                                        : null
-                                }
-                                onChange={handleSelectDeliverer}
-                                placeholder="جستجو یا انتخاب..."
-                                isSearchable
-                                classNamePrefix="customer-select"
+                                styles={selectStyles}
+                                isLoading={loading}
+                                isClearable
+                                placeholder="انتخاب..."
                                 menuPortalTarget={document.body}
-                                menuPosition="fixed"
+                                value={deliverer.id ? customerOptions.find(o => o.value === deliverer.id) : null}
+                                onChange={(s) => handleSelect("deliverer", s)}
+                                options={customerOptions}
                             />
                         </Col>
 
@@ -212,9 +178,7 @@ const ReceiptOwnerSection = ({ deliverer, setDeliverer, owner, setOwner }) => {
                             <Label>نام / شرکت</Label>
                             <Input
                                 value={deliverer.name || ""}
-                                onChange={(e) =>
-                                    setDeliverer({ ...deliverer, name: e.target.value })
-                                }
+                                onChange={(e) => updateDeliverer("name", e.target.value)}
                             />
                         </Col>
 
@@ -222,27 +186,19 @@ const ReceiptOwnerSection = ({ deliverer, setDeliverer, owner, setOwner }) => {
                             <Label>کد ملی</Label>
                             <Input
                                 value={deliverer.nationalId || ""}
-                                onChange={(e) =>
-                                    setDeliverer({ ...deliverer, nationalId: e.target.value })
-                                }
+                                maxLength={11}
+                                onChange={(e) => updateDeliverer("nationalId", e.target.value)}
                             />
                         </Col>
                     </Row>
                 </CardBody>
             </Card>
 
-            {/* ======================================
-                مودال افزودن مشتری جدید
-            ======================================= */}
             <AddCustomerModal
-                isOpen={showAddCustomer}
-                toggle={() => setShowAddCustomer(false)}
-                newCustomer={newCustomer}
-                setNewCustomer={setNewCustomer}
-                onSave={handleAddCustomer}
+                isOpen={showAdd}
+                onClose={() => setShowAdd(false)}
+                onSelect={handleNewCustomer}
             />
         </>
     );
-};
-
-export default ReceiptOwnerSection;
+}

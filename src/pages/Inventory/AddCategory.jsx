@@ -27,26 +27,30 @@ const AddCategory = () => {
     const [success, setSuccess] = useState("");
     const [categories, setCategories] = useState([]);
 
-    // لود دسته‌بندی‌ها برای انتخاب والد
+    /* ============================================================
+       Load list of categories for parent dropdown
+    ============================================================ */
     useEffect(() => {
         async function loadCategories() {
-            setLoadingCategories(true);
             try {
                 const res = await get("/product-categories");
-                setCategories(res?.docs || []);
+                setCategories(res?.data || []);
             } catch (err) {
-                console.error("Error loading categories:", err);
+                console.error("❌ Error loading categories:", err);
             }
             setLoadingCategories(false);
         }
         loadCategories();
     }, []);
 
+    /* ============================================================
+       Form Schema
+    ============================================================ */
     const formik = useFormik({
         initialValues: {
             name: "",
             slug: "",
-            parent: "",
+            parent_id: "",
             description: "",
             is_active: true,
             storage_cost: "",
@@ -56,13 +60,13 @@ const AddCategory = () => {
         validationSchema: Yup.object({
             name: Yup.string()
                 .required("نام دسته‌بندی الزامی است")
-                .min(2, "نام دسته باید حداقل 2 کاراکتر باشد"),
+                .min(2, "حداقل 2 کاراکتر"),
 
             slug: Yup.string()
                 .required("نامک الزامی است")
                 .matches(
                     /^[a-z0-9]+(?:-[a-z0-9]+)*$/,
-                    "نامک باید فقط شامل حروف کوچک انگلیسی، اعداد و خط تیره باشد"
+                    "نامک باید فقط شامل حروف کوچک انگلیسی، عدد و خط تیره باشد"
                 ),
 
             storage_cost: Yup.number()
@@ -76,55 +80,55 @@ const AddCategory = () => {
                 .min(0, "نباید منفی باشد"),
         }),
 
+        /* ============================================================
+           Submit Form
+        ============================================================ */
         onSubmit: async (values) => {
             setError("");
             setSuccess("");
             setLoading(true);
 
             try {
-                // چک تکراری بودن
-                const allCategories = await get("/product-categories");
-                const exists = (allCategories.docs || []).some((c) => {
+                // Load all for duplicate checking
+                const allCats = await get("/product-categories");
+                const list = allCats.data || [];
+
+                const exists = list.some((c) => {
                     const nameEqual =
-                        (c.name || "").trim().toLowerCase() ===
-                        values.name.trim().toLowerCase();
-
+                        c.name.trim().toLowerCase() === values.name.trim().toLowerCase();
                     const slugEqual =
-                        (c.slug || "").trim().toLowerCase() ===
-                        values.slug.trim().toLowerCase();
-
+                        c.slug.trim().toLowerCase() === values.slug.trim().toLowerCase();
                     return nameEqual || slugEqual;
                 });
 
                 if (exists) {
-                    setError("دسته‌بندی دیگری با همین نام یا نامک وجود دارد.");
+                    setError("دسته‌ای با همین نام یا نامک وجود دارد.");
                     setLoading(false);
                     return;
                 }
 
-                const result = await post("/product-categories", {
+                /* Prepare payload for backend */
+                const payload = {
                     name: values.name,
                     slug: values.slug,
-                    parent: values.parent ? Number(values.parent) : null,
+                    parent_id: values.parent_id ? Number(values.parent_id) : null,
                     description: values.description || "",
                     is_active: values.is_active,
-                    storage_cost: values.storage_cost
-                        ? Number(values.storage_cost)
-                        : null,
-                    loading_cost: values.loading_cost
-                        ? Number(values.loading_cost)
-                        : null,
-                });
+                    storage_cost: values.storage_cost ? Number(values.storage_cost) : null,
+                    loading_cost: values.loading_cost ? Number(values.loading_cost) : null,
+                };
 
-                if (result?.id || result?.doc?.id) {
+                const result = await post("/product-categories", payload);
+
+                if (result?.success) {
                     setSuccess("دسته‌بندی با موفقیت ثبت شد");
 
                     setTimeout(() => {
                         formik.resetForm();
                         setSuccess("");
-                    }, 2000);
+                    }, 1500);
                 } else {
-                    setError("خطا در ثبت دسته‌بندی");
+                    setError(result?.message || "خطا در ثبت دسته‌بندی");
                 }
             } catch (err) {
                 console.error("❌ Create error:", err);
@@ -135,7 +139,9 @@ const AddCategory = () => {
         },
     });
 
-    // تولید خودکار slug از نام
+    /* ============================================================
+       Auto-generate slug
+    ============================================================ */
     const generateSlug = (name) => {
         return name
             .toLowerCase()
@@ -150,10 +156,10 @@ const AddCategory = () => {
         <React.Fragment>
             <div className="page-content">
                 <Container fluid>
+
                     {/* Breadcrumb */}
                     <div className="page-title-box d-sm-flex align-items-center justify-content-between">
                         <h4 className="mb-sm-0 font-size-18">افزودن دسته‌بندی کالا</h4>
-
                         <div className="page-title-right">
                             <ol className="breadcrumb m-0">
                                 <li className="breadcrumb-item">
@@ -171,103 +177,64 @@ const AddCategory = () => {
                         <Col lg={8} className="mx-auto">
                             <Card>
                                 <CardBody>
+
                                     <div className="mb-4">
                                         <h4 className="card-title">اطلاعات دسته‌بندی</h4>
                                         <p className="card-title-desc">
-                                            لطفاً اطلاعات دسته‌بندی جدید را وارد نمایید
+                                            لطفاً اطلاعات دسته جدید را وارد کنید
                                         </p>
                                     </div>
 
                                     {/* Alerts */}
                                     {error && (
                                         <Alert color="danger" className="alert-dismissible fade show">
-                                            <i className="mdi mdi-block-helper me-2"></i>
                                             {error}
-                                            <button
-                                                type="button"
-                                                className="btn-close"
-                                                onClick={() => setError("")}
-                                            ></button>
+                                            <button type="button" className="btn-close" onClick={() => setError("")}></button>
                                         </Alert>
                                     )}
 
                                     {success && (
                                         <Alert color="success" className="alert-dismissible fade show">
-                                            <i className="mdi mdi-check-all me-2"></i>
                                             {success}
-                                            <button
-                                                type="button"
-                                                className="btn-close"
-                                                onClick={() => setSuccess("")}
-                                            ></button>
+                                            <button type="button" className="btn-close" onClick={() => setSuccess("")}></button>
                                         </Alert>
                                     )}
 
-                                    <Form
-                                        onSubmit={(e) => {
-                                            e.preventDefault();
-                                            formik.handleSubmit();
-                                        }}
-                                    >
+                                    {/* FORM */}
+                                    <Form onSubmit={formik.handleSubmit}>
+
+                                        {/* Name + Slug */}
                                         <Row>
-                                            {/* Name */}
                                             <Col md={6}>
                                                 <div className="mb-3">
-                                                    <Label htmlFor="name" className="form-label">
-                                                        نام دسته‌بندی <span className="text-danger">*</span>
-                                                    </Label>
+                                                    <Label>نام دسته‌بندی *</Label>
                                                     <Input
-                                                        id="name"
                                                         name="name"
                                                         type="text"
-                                                        placeholder="مثال: لوازم الکترونیکی"
+                                                        placeholder="مثال: فولاد"
                                                         value={formik.values.name}
                                                         onChange={(e) => {
                                                             formik.handleChange(e);
-                                                            if (!formik.touched.slug) {
-                                                                formik.setFieldValue(
-                                                                    "slug",
-                                                                    generateSlug(e.target.value)
-                                                                );
-                                                            }
+                                                            formik.setFieldValue("slug", generateSlug(e.target.value));
                                                         }}
-                                                        onBlur={formik.handleBlur}
-                                                        invalid={
-                                                            formik.touched.name &&
-                                                            !!formik.errors.name
-                                                        }
-                                                        disabled={loading}
+                                                        invalid={formik.touched.name && !!formik.errors.name}
                                                     />
-                                                    <FormFeedback>
-                                                        {formik.errors.name}
-                                                    </FormFeedback>
+                                                    <FormFeedback>{formik.errors.name}</FormFeedback>
                                                 </div>
                                             </Col>
 
-                                            {/* Slug */}
                                             <Col md={6}>
                                                 <div className="mb-3">
-                                                    <Label htmlFor="slug" className="form-label">
-                                                        نامک (Slug){" "}
-                                                        <span className="text-danger">*</span>
-                                                    </Label>
+                                                    <Label>نامک (Slug) *</Label>
                                                     <Input
-                                                        id="slug"
                                                         name="slug"
                                                         type="text"
-                                                        placeholder="مثال: electronics"
+                                                        placeholder="steel"
                                                         value={formik.values.slug}
                                                         onChange={formik.handleChange}
-                                                        onBlur={formik.handleBlur}
-                                                        invalid={
-                                                            formik.touched.slug &&
-                                                            !!formik.errors.slug
-                                                        }
-                                                        disabled={loading}
+                                                        invalid={formik.touched.slug && !!formik.errors.slug}
                                                     />
-                                                    <FormFeedback>
-                                                        {formik.errors.slug}
-                                                    </FormFeedback>
+                                                    <FormFeedback>{formik.errors.slug}</FormFeedback>
                                                 </div>
                                             </Col>
                                         </Row>
@@ -276,23 +243,19 @@ const AddCategory = () => {
                                         <Row>
                                             <Col md={12}>
                                                 <div className="mb-3">
-                                                    <Label htmlFor="parent" className="form-label">
-                                                        دسته والد
-                                                    </Label>
+                                                    <Label>دسته والد</Label>
+
                                                     {loadingCategories ? (
                                                         <Spinner size="sm" />
                                                     ) : (
                                                         <Input
-                                                            id="parent"
-                                                            name="parent"
+                                                            name="parent_id"
                                                             type="select"
-                                                            value={formik.values.parent}
+                                                            value={formik.values.parent_id}
                                                             onChange={formik.handleChange}
-                                                            disabled={loading}
                                                         >
-                                                            <option value="">
-                                                                بدون والد (دسته اصلی)
-                                                            </option>
+                                                            <option value="">بدون والد (دسته اصلی)</option>
+
                                                             {categories.map((cat) => (
                                                                 <option key={cat.id} value={cat.id}>
                                                                     {cat.name}
@@ -308,74 +271,47 @@ const AddCategory = () => {
                                         <Row>
                                             <Col md={12}>
                                                 <div className="mb-3">
-                                                    <Label
-                                                        htmlFor="description"
-                                                        className="form-label"
-                                                    >
-                                                        توضیحات
-                                                    </Label>
+                                                    <Label>توضیحات</Label>
                                                     <Input
-                                                        id="description"
                                                         name="description"
                                                         type="textarea"
                                                         rows="4"
                                                         value={formik.values.description}
                                                         onChange={formik.handleChange}
-                                                        disabled={loading}
                                                     />
                                                 </div>
                                             </Col>
                                         </Row>
 
-                                        {/* Storage + Loading Costs */}
+                                        {/* Costs */}
                                         <Row>
                                             <Col md={6}>
                                                 <div className="mb-3">
-                                                    <Label htmlFor="storage_cost" className="form-label">
-                                                        هزینه انبارداری (تومان)
-                                                    </Label>
+                                                    <Label>هزینه انبارداری</Label>
                                                     <Input
-                                                        id="storage_cost"
                                                         name="storage_cost"
                                                         type="number"
                                                         placeholder="مثلاً 5000"
                                                         value={formik.values.storage_cost}
                                                         onChange={formik.handleChange}
-                                                        onBlur={formik.handleBlur}
-                                                        invalid={
-                                                            formik.touched.storage_cost &&
-                                                            !!formik.errors.storage_cost
-                                                        }
-                                                        disabled={loading}
+                                                        invalid={formik.touched.storage_cost && !!formik.errors.storage_cost}
                                                     />
-                                                    <FormFeedback>
-                                                        {formik.errors.storage_cost}
-                                                    </FormFeedback>
+                                                    <FormFeedback>{formik.errors.storage_cost}</FormFeedback>
                                                 </div>
                                             </Col>
 
                                             <Col md={6}>
                                                 <div className="mb-3">
-                                                    <Label htmlFor="loading_cost" className="form-label">
-                                                        هزینه بارگیری (تومان)
-                                                    </Label>
+                                                    <Label>هزینه بارگیری</Label>
                                                     <Input
-                                                        id="loading_cost"
                                                         name="loading_cost"
                                                         type="number"
                                                         placeholder="مثلاً 20000"
                                                         value={formik.values.loading_cost}
                                                         onChange={formik.handleChange}
-                                                        onBlur={formik.handleBlur}
-                                                        invalid={
-                                                            formik.touched.loading_cost &&
-                                                            !!formik.errors.loading_cost
-                                                        }
-                                                        disabled={loading}
+                                                        invalid={formik.touched.loading_cost && !!formik.errors.loading_cost}
                                                     />
-                                                    <FormFeedback>
-                                                        {formik.errors.loading_cost}
-                                                    </FormFeedback>
+                                                    <FormFeedback>{formik.errors.loading_cost}</FormFeedback>
                                                 </div>
                                             </Col>
                                         </Row>
@@ -385,17 +321,13 @@ const AddCategory = () => {
                                             <Col md={12}>
                                                 <div className="form-check form-switch mb-4">
                                                     <Input
-                                                        id="is_active"
-                                                        name="is_active"
                                                         type="checkbox"
+                                                        name="is_active"
                                                         className="form-check-input"
                                                         checked={formik.values.is_active}
                                                         onChange={formik.handleChange}
                                                     />
-                                                    <Label
-                                                        className="form-check-label"
-                                                        htmlFor="is_active"
-                                                    >
+                                                    <Label className="form-check-label">
                                                         دسته‌بندی فعال باشد
                                                     </Label>
                                                 </div>
@@ -404,11 +336,7 @@ const AddCategory = () => {
 
                                         {/* Buttons */}
                                         <div className="d-flex flex-wrap gap-2">
-                                            <Button
-                                                type="submit"
-                                                color="primary"
-                                                disabled={loading}
-                                            >
+                                            <Button type="submit" color="primary" disabled={loading}>
                                                 {loading ? (
                                                     <>
                                                         <Spinner size="sm" className="me-2" />
@@ -422,33 +350,21 @@ const AddCategory = () => {
                                                 )}
                                             </Button>
 
-                                            <Button
-                                                type="button"
-                                                color="light"
-                                                onClick={() => formik.resetForm()}
-                                                disabled={loading}
-                                            >
-                                                <i className="bx bx-refresh me-1"></i>
+                                            <Button type="button" color="light" onClick={() => formik.resetForm()} disabled={loading}>
                                                 پاک کردن فرم
                                             </Button>
 
-                                            <Button
-                                                type="button"
-                                                color="secondary"
-                                                onClick={() =>
-                                                    navigate("/inventory/category-list")
-                                                }
-                                                disabled={loading}
-                                            >
-                                                <i className="bx bx-arrow-back me-1"></i>
+                                            <Button type="button" color="secondary" onClick={() => navigate("/inventory/category-list")}>
                                                 بازگشت
                                             </Button>
                                         </div>
+
                                     </Form>
                                 </CardBody>
                             </Card>
                         </Col>
                     </Row>
+
                 </Container>
             </div>
         </React.Fragment>

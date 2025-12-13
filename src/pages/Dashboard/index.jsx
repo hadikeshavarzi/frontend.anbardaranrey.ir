@@ -6,6 +6,7 @@ import Breadcrumbs from "../../components/Common/Breadcrumb";
 import MemberCard from "./MemberCard";
 import StatsCard from "./StatsCard";
 import LatestRequests from "./LatestRequests";
+import { API_BASE } from "../../helpers/api_helper.jsx";
 
 const Dashboard = () => {
   const [member, setMember] = useState(null);
@@ -13,7 +14,7 @@ const Dashboard = () => {
   const [loading, setLoading] = useState(true);
 
   // ✅ API URL از environment variable یا پیش‌فرض
-  const API_BASE = import.meta.env.VITE_API_URL || 'https://cms.anbardaranrey.ir';
+
   const API_URL = `${API_BASE}/api`;
 
   useEffect(() => {

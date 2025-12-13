@@ -1,1036 +1,1241 @@
-// src/components/Receipt/ReceiptItemsTable.jsx
-
-import React, { useState, useMemo, useCallback, useRef, useEffect } from "react";
-import { Row, Col, Button, Input, Table } from "reactstrap";
+import React, { useState, useMemo, useEffect, useCallback, memo, useRef } from "react";
+import {
+    Button,
+    Table,
+    Card,
+    CardBody,
+    CardHeader,
+    Badge,
+    Row,
+    Col,
+} from "reactstrap";
 import {
     useReactTable,
     getCoreRowModel,
     getFilteredRowModel,
-    getPaginationRowModel,
-    getSortedRowModel,
     flexRender,
 } from "@tanstack/react-table";
-
 import ColumnManagerModal from "./ColumnManagerModal";
+import { get } from "../../helpers/api_helper";
 
-/* -------------------------------------------------------------
- *   لیبل ستون‌ها
- * ------------------------------------------------------------- */
+/* ==========================================
+   استایل‌های Skote-Based
+========================================== */
+const SKOTE_COLORS = {
+    primary: "#556ee6",
+    success: "#34c38f",
+    warning: "#f1b44c",
+    danger: "#f46a6a",
+    info: "#50a5f1",
+    dark: "#343a40",
+    muted: "#74788d",
+    light: "#f8f9fa",
+    white: "#ffffff",
+    border: "#eff2f7",
+    tableBg: "#f8f9fa",
+    tableHover: "#f1f5f7",
+};
+
+const styles = {
+    card: {
+        boxShadow: "0 0.75rem 1.5rem rgba(18,38,63,.03)",
+        borderRadius: "0.25rem",
+        border: "none",
+        marginBottom: "1.5rem",
+    },
+    cardHeader: {
+        background: "linear-gradient(135deg, #556ee6 0%, #4458cb 100%)",
+        borderRadius: "0.25rem 0.25rem 0 0",
+        padding: "1rem 1.25rem",
+        borderBottom: "none",
+    },
+    cardTitle: {
+        color: "#fff",
+        fontSize: "1.1rem",
+        fontWeight: 500,
+        margin: 0,
+    },
+    tableWrapper: {
+        overflowX: "auto",
+        borderRadius: "0 0 0.25rem 0.25rem",
+    },
+    table: {
+        marginBottom: 0,
+        fontSize: "0.8125rem",
+        tableLayout: "fixed",
+    },
+    tableHead: {
+        backgroundColor: SKOTE_COLORS.light,
+        borderBottom: `2px solid ${SKOTE_COLORS.border}`,
+    },
+    th: {
+        fontWeight: 600,
+        color: SKOTE_COLORS.dark,
+        padding: "0.75rem 0.5rem",
+        whiteSpace: "nowrap",
+        fontSize: "0.8125rem",
+        borderTop: "none",
+        verticalAlign: "middle",
+        textAlign: "center",
+        position: "relative",
+        userSelect: "none",
+    },
+    td: {
+        padding: "0.5rem",
+        verticalAlign: "middle",
+        borderColor: SKOTE_COLORS.border,
+    },
+    input: {
+        fontSize: "0.8125rem",
+        padding: "0.35rem 0.5rem",
+        borderRadius: "0.2rem",
+        border: `1px solid ${SKOTE_COLORS.border}`,
+        textAlign: "center",
+        transition: "border-color 0.15s ease-in-out, box-shadow 0.15s ease-in-out",
+        width: "100%",
+    },
+    inputFocus: {
+        borderColor: SKOTE_COLORS.primary,
+        boxShadow: `0 0 0 0.15rem rgba(85, 110, 230, 0.25)`,
+    },
+    select: {
+        fontSize: "0.8125rem",
+        padding: "0.35rem 0.5rem",
+        borderRadius: "0.2rem",
+        border: `1px solid ${SKOTE_COLORS.border}`,
+        backgroundColor: SKOTE_COLORS.white,
+        cursor: "pointer",
+        width: "100%",
+    },
+    badge: {
+        fontSize: "0.75rem",
+        padding: "0.35em 0.65em",
+        fontWeight: 500,
+    },
+    summaryRow: {
+        backgroundColor: SKOTE_COLORS.light,
+        fontWeight: 600,
+    },
+    actionBtn: {
+        padding: "0.25rem 0.5rem",
+        fontSize: "0.75rem",
+        lineHeight: 1.5,
+        borderRadius: "0.2rem",
+    },
+    statsCard: {
+        background: "linear-gradient(135deg, #fff 0%, #f8f9fa 100%)",
+        borderRadius: "0.25rem",
+        padding: "0.75rem 1rem",
+        border: `1px solid ${SKOTE_COLORS.border}`,
+        display: "flex",
+        alignItems: "center",
+        gap: "0.75rem",
+    },
+    statsIcon: {
+        width: "40px",
+        height: "40px",
+        borderRadius: "0.25rem",
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "center",
+        fontSize: "1.25rem",
+    },
+    resizeHandle: {
+        position: "absolute",
+        left: 0,
+        top: 0,
+        height: "100%",
+        width: "5px",
+        cursor: "col-resize",
+        backgroundColor: "transparent",
+        zIndex: 1,
+    },
+};
+
+/* ==========================================
+   تعریف لیبل‌ها و ترتیب پیش‌فرض
+========================================== */
 const COLUMN_LABELS = {
-    nationalProductId: "شناسه کالا ملی",
+    actions: "عملیات",
+    id: "#",
+    nationalProductId: "شناسه ملی",
+    categoryId: "گروه کالا",
+    productId: "نام کالا",
     productDescription: "شرح کالا",
-    group: "گروه کالا",
-    description: "نام کالا",
+    productionType: "نوع تولید",
     count: "تعداد",
     unit: "واحد",
-    productionType: "نوع تولید",
-    isUsed: "مستعمل",
-    isDefective: "معیوب",
     fullWeight: "وزن پر",
     emptyWeight: "وزن خالی",
     netWeight: "وزن خالص",
-    originWeight: "وزن مبدأ",
-    weightDiff: "اختلاف",
+    originWeight: "وزن مبدا",
+    weightDiff: "اختلاف وزن",
+    isUsed: "مستعمل",
+    isDefective: "معیوب",
     length: "طول",
     width: "عرض",
     thickness: "ضخامت",
     heatNumber: "Heat No",
     bundleNo: "شماره بسته",
-    brand: "برند / کارخانه",
+    brand: "برند",
     orderNo: "شماره سفارش",
+    parentRow: "ردیف مرجع",
     depoLocation: "محل دپو",
     descriptionNotes: "توضیحات",
-    row: "ردیف",
+    rowCode: "کد ردیف",
 };
 
-/* -------------------------------------------------------------
- *   نمایش پیش‌فرض ستون‌ها
- * ------------------------------------------------------------- */
-const DEFAULT_VISIBILITY = {
-    nationalProductId: true,
-    productDescription: true,
-    group: true,
-    description: true,
-    count: true,
-    unit: true,
-    productionType: true,
-    isUsed: true,
-    isDefective: true,
-    fullWeight: true,
-    emptyWeight: true,
-    netWeight: true,
-    originWeight: true,
-    weightDiff: true,
-    length: true,
-    width: true,
-    thickness: true,
-    heatNumber: true,
-    bundleNo: true,
-    brand: true,
-    orderNo: true,
-    depoLocation: true,
-    descriptionNotes: true,
-    row: true,
+// ترتیب پیش‌فرض ستون‌ها
+const DEFAULT_COLUMN_ORDER = [
+    "actions",
+    "id",
+    "nationalProductId",
+    "categoryId",
+    "productId",
+    "productDescription",
+    "productionType",
+    "count",
+    "unit",
+    "fullWeight",
+    "emptyWeight",
+    "netWeight",
+    "originWeight",
+    "weightDiff",
+    "isUsed",
+    "isDefective",
+    "length",
+    "width",
+    "thickness",
+    "heatNumber",
+    "bundleNo",
+    "brand",
+    "orderNo",
+    "parentRow",
+    "depoLocation",
+    "descriptionNotes",
+    "rowCode",
+];
+
+// عرض پیش‌فرض ستون‌ها
+const DEFAULT_COLUMN_WIDTHS = {
+    actions: 60,
+    id: 50,
+    nationalProductId: 140,
+    categoryId: 180,
+    productId: 200,
+    productDescription: 150,
+    productionType: 100,
+    count: 90,
+    unit: 80,
+    fullWeight: 100,
+    emptyWeight: 100,
+    netWeight: 100,
+    originWeight: 100,
+    weightDiff: 100,
+    isUsed: 70,
+    isDefective: 70,
+    length: 80,
+    width: 80,
+    thickness: 80,
+    heatNumber: 100,
+    bundleNo: 100,
+    brand: 100,
+    orderNo: 100,
+    parentRow: 100,
+    depoLocation: 120,
+    descriptionNotes: 150,
+    rowCode: 100,
 };
 
-/* ------------------------------------------------------------- */
-const ReceiptItemsTable = ({ onItemsChange, initialItems }) => {
-    /* -------------------------------------------------------------
-     * ۱) داده‌ها
-     * ------------------------------------------------------------- */
+const DEFAULT_VIS = Object.fromEntries(
+    Object.keys(COLUMN_LABELS).map((k) => [k, true])
+);
 
+const STORAGE_KEY = "receiptTable_settings_v3";
+
+/* ==========================================
+   ذخیره و بازیابی تنظیمات
+========================================== */
+const loadSettings = () => {
+    try {
+        const saved = localStorage.getItem(STORAGE_KEY);
+        if (saved) {
+            const parsed = JSON.parse(saved);
+            return {
+                columnOrder: parsed.columnOrder || DEFAULT_COLUMN_ORDER,
+                columnWidths: { ...DEFAULT_COLUMN_WIDTHS, ...parsed.columnWidths },
+                columnVisibility: { ...DEFAULT_VIS, ...parsed.columnVisibility },
+            };
+        }
+    } catch (e) {
+        console.error("Error loading settings:", e);
+    }
+    return {
+        columnOrder: DEFAULT_COLUMN_ORDER,
+        columnWidths: DEFAULT_COLUMN_WIDTHS,
+        columnVisibility: DEFAULT_VIS,
+    };
+};
+
+const saveSettings = (settings) => {
+    try {
+        localStorage.setItem(STORAGE_KEY, JSON.stringify(settings));
+    } catch (e) {
+        console.error("Error saving settings:", e);
+    }
+};
+
+/* ==========================================
+   کامپوننت ورودی عددی
+========================================== */
+const NumericInput = memo(({ value, onChange, onBlur, ...props }) => {
+    const [displayValue, setDisplayValue] = useState("");
+    const [isFocused, setIsFocused] = useState(false);
+
+    useEffect(() => {
+        if (value === null || value === undefined) setDisplayValue("");
+        else setDisplayValue(Number(value).toLocaleString("en-US"));
+    }, [value]);
+
+    const handleChange = (e) => {
+        const raw = e.target.value.replace(/[^0-9.]/g, "");
+        setDisplayValue(raw.replace(/\B(?=(\d{3})+(?!\d))/g, ","));
+        onChange(raw);
+    };
+
+    return (
+        <input
+            type="text"
+            className="form-control form-control-sm"
+            value={displayValue}
+            onChange={handleChange}
+            onBlur={(e) => {
+                setIsFocused(false);
+                onBlur?.(e);
+            }}
+            onFocus={() => setIsFocused(true)}
+            style={{
+                ...styles.input,
+                ...(isFocused ? styles.inputFocus : {}),
+            }}
+            {...props}
+        />
+    );
+});
+
+/* ==========================================
+   کامپوننت سلول قابل ویرایش
+========================================== */
+const EditableCell = memo(
+    ({ value: initialValue, row, column, updateData, type = "text" }) => {
+        const [value, setValue] = useState(initialValue);
+        const [isFocused, setIsFocused] = useState(false);
+
+        useEffect(() => setValue(initialValue), [initialValue]);
+
+        const onBlur = () => updateData(row.index, column.id, value);
+
+        if (type === "number") {
+            return <NumericInput value={value} onChange={setValue} onBlur={onBlur} />;
+        }
+
+        return (
+            <input
+                type="text"
+                className="form-control form-control-sm"
+                value={value || ""}
+                onChange={(e) => setValue(e.target.value)}
+                onBlur={() => {
+                    setIsFocused(false);
+                    onBlur();
+                }}
+                onFocus={() => setIsFocused(true)}
+                style={{
+                    ...styles.input,
+                    ...(isFocused ? styles.inputFocus : {}),
+                }}
+            />
+        );
+    }
+);
+
+/* ==========================================
+   کامپوننت هدر قابل درگ و ریسایز
+========================================== */
+const DraggableHeader = ({
+                             columnId,
+                             columnWidth,
+                             onResize,
+                             onDragStart,
+                             onDragOver,
+                             onDrop,
+                             isDragging,
+                             isDragOver,
+                             children,
+                         }) => {
+    const [isResizing, setIsResizing] = useState(false);
+    const startXRef = useRef(0);
+    const startWidthRef = useRef(0);
+
+    const handleResizeStart = (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        setIsResizing(true);
+        startXRef.current = e.clientX;
+        startWidthRef.current = columnWidth;
+
+        const handleMouseMove = (moveEvent) => {
+            const diff = startXRef.current - moveEvent.clientX;
+            const newWidth = Math.max(50, startWidthRef.current + diff);
+            onResize(columnId, newWidth);
+        };
+
+        const handleMouseUp = () => {
+            setIsResizing(false);
+            document.removeEventListener("mousemove", handleMouseMove);
+            document.removeEventListener("mouseup", handleMouseUp);
+        };
+
+        document.addEventListener("mousemove", handleMouseMove);
+        document.addEventListener("mouseup", handleMouseUp);
+    };
+
+    return (
+        <th
+            draggable
+            onDragStart={(e) => onDragStart(e, columnId)}
+            onDragOver={(e) => onDragOver(e, columnId)}
+            onDrop={(e) => onDrop(e, columnId)}
+            onDragEnd={(e) => e.target.style.opacity = "1"}
+            style={{
+                ...styles.th,
+                width: columnWidth,
+                minWidth: columnWidth,
+                maxWidth: columnWidth,
+                opacity: isDragging ? 0.5 : 1,
+                backgroundColor: isDragOver ? "rgba(85, 110, 230, 0.1)" : undefined,
+                borderRight: isDragOver ? `2px solid ${SKOTE_COLORS.primary}` : undefined,
+                transition: "background-color 0.2s, opacity 0.2s",
+            }}
+        >
+            {/* Resize Handle */}
+            <div
+                style={{
+                    ...styles.resizeHandle,
+                    backgroundColor: isResizing ? SKOTE_COLORS.primary : "transparent",
+                }}
+                onMouseDown={handleResizeStart}
+                title="تغییر اندازه"
+            />
+
+            {/* Content */}
+            <div
+                style={{
+                    cursor: "grab",
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "center",
+                    gap: "4px",
+                }}
+            >
+                <i
+                    className="bx bx-grid-vertical"
+                    style={{
+                        fontSize: "0.75rem",
+                        opacity: 0.4,
+                        flexShrink: 0,
+                    }}
+                />
+                <span style={{ overflow: "hidden", textOverflow: "ellipsis" }}>
+          {children}
+        </span>
+            </div>
+        </th>
+    );
+};
+
+/* ==========================================
+   کامپوننت آمار
+========================================== */
+const StatCard = ({ icon, label, value, color, bgColor }) => (
+    <div style={styles.statsCard}>
+        <div style={{ ...styles.statsIcon, backgroundColor: bgColor, color }}>
+            <i className={icon}></i>
+        </div>
+        <div>
+            <div style={{ fontSize: "0.75rem", color: SKOTE_COLORS.muted }}>{label}</div>
+            <div style={{ fontSize: "1rem", fontWeight: 600, color: SKOTE_COLORS.dark }}>
+                {value}
+            </div>
+        </div>
+    </div>
+);
+
+/* ==========================================
+   جدول اصلی
+========================================== */
+const ReceiptItemsTable = ({ onItemsChange, ownerId, initialItems }) => {
     const [data, setData] = useState([]);
     const [categories, setCategories] = useState([]);
     const [productsByCat, setProductsByCat] = useState({});
-    const [columnVisibility, setColumnVisibility] = useState(() => {
-        try {
-            const saved = localStorage.getItem("receiptColumns");
-            return saved ? JSON.parse(saved) : DEFAULT_VISIBILITY;
-        } catch {
-            return DEFAULT_VISIBILITY;
-        }
-    });
-
-    const [sorting, setSorting] = useState([]);
-    const [globalFilter, setGlobalFilter] = useState("");
     const [showColumnModal, setShowColumnModal] = useState(false);
-    const [isInitialLoad, setIsInitialLoad] = useState(false);
+    const [hoveredRow, setHoveredRow] = useState(null);
+    const productsCacheRef = useRef({});
+    const isDataLoaded = useRef(false);
+    // Drag state
+    const [draggedColumn, setDraggedColumn] = useState(null);
+    const [dragOverColumn, setDragOverColumn] = useState(null);
 
-    const tableRef = useRef(null);
+    // تنظیمات ذخیره‌شده
+    const [settings, setSettings] = useState(loadSettings);
+    const { columnOrder, columnWidths, columnVisibility } = settings;
 
-    /* -------------------------------------------------------------
-     * ۲) لود گروه‌ها از Payload
-     * ------------------------------------------------------------- */
-
+    // ذخیره تنظیمات هنگام تغییر
     useEffect(() => {
-        const loadCats = async () => {
-            try {
-                const res = await fetch("https://portal.anbardaranrey.ir/api/product-categories?limit=500");
-                const json = await res.json();
-                
-                if (json?.docs && Array.isArray(json.docs)) {
-                    setCategories(json.docs);
-                }
-            } catch (err) {
-                console.error("Error loading categories:", err);
-                setCategories([]);
-            }
-        };
-        loadCats();
+        saveSettings(settings);
+    }, [settings]);
+
+    /* --- آمار --- */
+    const summary = useMemo(
+        () =>
+            data.reduce(
+                (s, r) => ({
+                    count: s.count + Number(r.count || 0),
+                    netWeight: s.netWeight + Number(r.netWeight || 0),
+                    items: s.items + 1,
+                }),
+                { count: 0, netWeight: 0, items: 0 }
+            ),
+        [data]
+    );
+
+    /* --- دریافت دسته‌بندی‌ها --- */
+    useEffect(() => {
+        get("/product-categories?limit=500")
+            .then((res) => setCategories(res.data || []))
+            .catch(console.error);
     }, []);
 
-    /* -------------------------------------------------------------
-     * ۳) لود آیتم‌های اولیه (برای ویرایش)
-     * ------------------------------------------------------------- */
-    useEffect(() => {
-        console.log("🔍 useEffect initialItems triggered");
-        console.log("📦 initialItems:", initialItems);
-        console.log("📦 initialItems length:", initialItems?.length);
-        console.log("📦 data length:", data.length);
-        
-        // ⭐ فقط لود کن اگر initialItems پر باشه و data خالی باشه
-        if (initialItems && initialItems.length > 0 && data.length === 0) {
-            console.log("✅ شروع لود initialItems در ReceiptItemsTable");
-            console.log("📥 تعداد آیتم‌ها:", initialItems.length);
-            
-            const loadItemsAsync = async () => {
-                const formattedRows = [];
-                
-                for (let index = 0; index < initialItems.length; index++) {
-                    const item = initialItems[index];
-                    console.log(`🔄 Processing item ${index + 1}:`, item);
-                    
-                    // ⭐ اگر آیتم محصول دارد و گروه نداره، باید گروهش را پیدا کنیم
-                    let categoryId = item.group;
-                    
-                    if (item.description && !categoryId) {
-                        try {
-                            console.log(`🔍 Finding category for product ${item.description}`);
-                            const res = await fetch(
-                                `https://portal.anbardaranrey.ir/api/products/${item.description}`
-                            );
-                            const product = await res.json();
-                            
-                            if (product?.category) {
-                                categoryId = typeof product.category === 'object' 
-                                    ? product.category.id 
-                                    : product.category;
-                                
-                                console.log(`📂 گروه محصول ${item.description}: ${categoryId}`);
-                            }
-                        } catch (err) {
-                            console.error("Error finding group for product:", err);
-                        }
-                    }
-                    
-                    // ⭐ لود محصولات این گروه
-                    if (categoryId) {
-                        console.log(`📦 Loading products for category ${categoryId}`);
-                        await loadProductsForCategory(categoryId);
-                    }
-
-                    const formattedItem = {
-                        id: index + 1, // شماره ردیف برای UI
-                        itemId: item.itemId, // ⭐ ID واقعی از database (حفظ می‌شود)
-                        nationalProductId: item.nationalProductId || "",
-                        productDescription: item.productDescription || "",
-                        group: categoryId || "", // گروه کالا
-                        description: item.description || "", // ⭐ ID محصول (حفظ می‌شود)
-                        count: item.count || "",
-                        unit: item.unit || "",
-                        productionType: item.productionType || "",
-                        isUsed: item.isUsed || false,
-                        isDefective: item.isDefective || false,
-                        fullWeight: item.fullWeight || "",
-                        emptyWeight: item.emptyWeight || "",
-                        netWeight: item.netWeight || 0,
-                        originWeight: item.originWeight || "",
-                        weightDiff: item.weightDiff || 0,
-                        length: item.length || "",
-                        width: item.width || "",
-                        thickness: item.thickness || "",
-                        heatNumber: item.heatNumber || "",
-                        bundleNo: item.bundleNo || "",
-                        brand: item.brand || "",
-                        orderNo: item.orderNo || "",
-                        depoLocation: item.depoLocation || "",
-                        descriptionNotes: item.descriptionNotes || "",
-                        row: item.row || "",
-                    };
-                    
-                    console.log(`✅ Item ${index + 1} formatted:`, {
-                        id: formattedItem.id,
-                        itemId: formattedItem.itemId,
-                        description: formattedItem.description,
-                        group: formattedItem.group
-                    });
-                    
-                    formattedRows.push(formattedItem);
-                }
-
-                console.log("✅ All rows formatted:", formattedRows.length);
-                console.log("📊 First row sample:", formattedRows[0]);
-                
-                setData(formattedRows);
-                setIsInitialLoad(true);
-                
-                console.log("✅ data state به‌روزرسانی شد");
-            };
-            
-            loadItemsAsync();
-        } else {
-            if (!initialItems) {
-                console.log("⚠️ initialItems is null/undefined");
-            } else if (initialItems.length === 0) {
-                console.log("⚠️ initialItems is empty array");
-            } else if (data.length > 0) {
-                console.log("⚠️ data already has items (data.length = " + data.length + ")");
-            }
-        }
-    }, [initialItems]); // ⭐ فقط به initialItems وابسته باشد
-
-    /* -------------------------------------------------------------
-     * ۴) لود کالاها بر اساس گروه
-     * ------------------------------------------------------------- */
-    const loadProductsForCategory = async (catId) => {
+const loadProductsForCategory = useCallback(
+    async (catId) => {
         if (!catId) return;
-        if (productsByCat[catId]) return; // کش
+
+        // اگر در کش هست (چه دیتای کامل، چه علامت در حال لود)، خارج شو
+        if (productsCacheRef.current[catId]) return;
+
+        // 1. علامت‌گذاری فوری (Prevent Race Condition)
+        productsCacheRef.current[catId] = []; // موقتاً یک آرایه خالی یا true می‌گذاریم
 
         try {
-            const res = await fetch(
-                `https://portal.anbardaranrey.ir/api/products?where[category][equals]=${catId}&limit=500`
-            );
+            const res = await get(`/products?category_id=${catId}&limit=500`);
+            const list = res.data || [];
 
-            const json = await res.json();
+            // 2. آپدیت کش با دیتای واقعی
+            productsCacheRef.current[catId] = list;
 
-            if (json?.docs && Array.isArray(json.docs)) {
-                setProductsByCat((prev) => ({
-                    ...prev,
-                    [catId]: json.docs,
-                }));
-            }
-        } catch (err) {
-            console.error("Error loading products:", err);
             setProductsByCat((prev) => ({
                 ...prev,
-                [catId]: [],
+                [catId]: list,
             }));
+        } catch (err) {
+            console.error("Load products failed:", err);
+            // در صورت خطا، کش را پاک کنید تا دوباره تلاش کند
+            delete productsCacheRef.current[catId];
         }
-    };
+    },
+    []
+);
 
-    /* -------------------------------------------------------------
-     * ۵) ایجاد ردیف خالی
-     * ------------------------------------------------------------- */
-    const createEmptyRow = (id) => ({
-        id, // شماره ردیف برای UI
-        itemId: null, // ⭐ آیتم جدید itemId ندارد
-        nationalProductId: "",
-        productDescription: "",
-        group: "",
-        description: "",
-        count: "",
-        unit: "",
-        productionType: "",
-        isUsed: false,
-        isDefective: false,
-        fullWeight: "",
-        emptyWeight: "",
-        netWeight: 0,
-        originWeight: "",
-        weightDiff: 0,
-        length: "",
-        width: "",
-        thickness: "",
-        heatNumber: "",
-        bundleNo: "",
-        brand: "",
-        orderNo: "",
-        depoLocation: "",
-        descriptionNotes: "",
-        row: "",
-    });
 
-    /* -------------------------------------------------------------
-     * ۶) افزودن ردیف
-     * ------------------------------------------------------------- */
-    const addRow = () => {
-        setData((prev) => [...prev, createEmptyRow(prev.length + 1)]);
-    };
-
-    const deleteRow = (rowId) => {
-        setData((prev) => {
-            const filtered = prev.filter((r) => r.id !== rowId);
-            
-            // ⭐ مهم: فقط id (شماره ردیف UI) را دوباره شماره‌گذاری می‌کنیم
-            // itemId (ID واقعی database) تغییر نمی‌کند
-            return filtered.map((row, index) => ({
-                ...row,
-                id: index + 1, // فقط شماره ردیف UI
-                // itemId همان می‌ماند
-            }));
-        });
-    };
-
-    /* -------------------------------------------------------------
-     * ۷) اعلام تغییرات آیتم‌ها به فرم پدر
-     * ------------------------------------------------------------- */
+    /* --- مپ کردن داده‌های اولیه --- */
+/* --- مپ کردن داده‌های اولیه (اصلاح شده) --- */
     useEffect(() => {
-        console.log("📢 useEffect onItemsChange triggered");
-        console.log("📊 data length:", data.length);
-        
-        // ⭐ فقط اگر data پر باشه و onItemsChange موجود باشه
-        if (onItemsChange && data.length > 0) {
-            console.log("✅ ارسال data به parent");
-            console.log("📦 data sample:", data[0]);
-            onItemsChange(data);
-        } else {
-            if (!onItemsChange) {
-                console.log("⚠️ onItemsChange is not defined");
-            } else if (data.length === 0) {
-                console.log("⚠️ data is empty, not sending to parent");
-            }
-        }
-    }, [data, onItemsChange]);
+        // اگر داده‌ها قبلاً لود شده‌اند یا داده‌ای برای لود وجود ندارد، خارج شو
+        if (isDataLoaded.current || !initialItems || initialItems.length === 0) return;
 
-    /* -------------------------------------------------------------
-     * ۸) ناوبری با Enter
-     * ------------------------------------------------------------- */
-    const handleNavigate = (e) => {
-        if (e.key === "Enter") {
-            e.preventDefault();
-            const inputs = [...document.querySelectorAll("[data-col]")];
-            const index = inputs.indexOf(e.target);
-            const next = inputs[index + 1];
-            next?.focus();
+        const mapped = initialItems.map((r, idx) => ({
+            id: idx + 1,
+            realId: r.id,
+            categoryId: r.category_id,
+            productId: r.product_id,
+            nationalProductId: r.national_product_id,
+            productDescription: r.product_description,
+            rowCode: r.row_code,
+            parentRow: r.parent_row,
+            count: r.count,
+            unit: r.unit || "kg",
+            productionType: r.production_type || "domestic",
+            isUsed: r.is_used || false,
+            isDefective: r.is_defective || false,
+            fullWeight: r.weights_full,
+            emptyWeight: r.weights_empty,
+            netWeight: r.weights_net,
+            originWeight: r.weights_origin,
+            weightDiff: r.weights_diff,
+            length: r.dim_length,
+            width: r.dim_width,
+            thickness: r.dim_thickness,
+            heatNumber: r.heat_number,
+            bundleNo: r.bundle_no,
+            brand: r.brand,
+            orderNo: r.order_no,
+            depoLocation: r.depo_location,
+            descriptionNotes: r.description_notes,
+        }));
+
+        setData(mapped);
+
+        // لود کردن محصولات برای سطرهایی که دسته‌بندی دارند
+        mapped.forEach((r) => {
+            if (r.categoryId) {
+                loadProductsForCategory(r.categoryId);
+            }
+        });
+
+        // ✅ علامت می‌زنیم که لود اولیه انجام شد تا دیگر لوپ تکرار نشود
+        isDataLoaded.current = true;
+
+    }, [initialItems, loadProductsForCategory]);
+
+    /* --- خروجی --- */
+    useEffect(() => {
+        if (!onItemsChange) return;
+        const mapped = data.map((r) => ({
+            id: r.realId,
+            owner_id: ownerId,
+            category_id: Number(r.categoryId) || null,
+            product_id: Number(r.productId) || null,
+            national_product_id: r.nationalProductId,
+            product_description: r.productDescription,
+            row_code: r.rowCode,
+            parent_row: r.parentRow,
+            count: Number(r.count || 0),
+            unit: r.unit,
+            production_type: r.productionType,
+            is_used: Boolean(r.isUsed),
+            is_defective: Boolean(r.isDefective),
+            weights_full: Number(r.fullWeight || 0),
+            weights_empty: Number(r.emptyWeight || 0),
+            weights_net: Number(r.netWeight || 0),
+            weights_origin: Number(r.originWeight || 0),
+            weights_diff: Number(r.weightDiff || 0),
+            dim_length: Number(r.length || 0),
+            dim_width: Number(r.width || 0),
+            dim_thickness: Number(r.thickness || 0),
+            heat_number: r.heatNumber,
+            bundle_no: r.bundleNo,
+            brand: r.brand,
+            order_no: r.orderNo,
+            depo_location: r.depoLocation,
+            description_notes: r.descriptionNotes,
+        }));
+        onItemsChange(mapped);
+    }, [data, ownerId, onItemsChange]);
+
+    /* --- عملیات‌ها --- */
+    const addRow = () =>
+        setData((prev) => [
+            ...prev,
+            {
+                id: prev.length + 1,
+                unit: "kg",
+                productionType: "domestic",
+                isUsed: false,
+                isDefective: false,
+            },
+        ]);
+
+    const deleteRow = (id) => setData((prev) => prev.filter((r) => r.id !== id));
+
+    const updateData = useCallback(
+        (rowIndex, col, value) => {
+            setData((prev) =>
+                prev.map((r, i) => {
+                    if (i !== rowIndex) return r;
+                    const out = { ...r, [col]: value };
+                    if (["fullWeight", "emptyWeight", "originWeight"].includes(col)) {
+                        const full = Number(col === "fullWeight" ? value : r.fullWeight) || 0;
+                        const empty = Number(col === "emptyWeight" ? value : r.emptyWeight) || 0;
+                        const origin = Number(col === "originWeight" ? value : r.originWeight) || 0;
+                        out.netWeight = full - empty;
+                        out.weightDiff = out.netWeight - origin;
+                    }
+                    if (col === "categoryId") {
+                        out.productId = "";
+                        loadProductsForCategory(value);
+                    }
+                    return out;
+                })
+            );
+        },
+        [loadProductsForCategory]
+    );
+
+    /* --- تغییر اندازه ستون --- */
+    const handleColumnResize = useCallback((columnId, width) => {
+        setSettings((prev) => ({
+            ...prev,
+            columnWidths: {
+                ...prev.columnWidths,
+                [columnId]: width,
+            },
+        }));
+    }, []);
+
+    /* --- Drag & Drop Handlers --- */
+    const handleDragStart = (e, columnId) => {
+        setDraggedColumn(columnId);
+        e.dataTransfer.effectAllowed = "move";
+        e.target.style.opacity = "0.5";
+    };
+
+    const handleDragOver = (e, columnId) => {
+        e.preventDefault();
+        e.dataTransfer.dropEffect = "move";
+        if (columnId !== draggedColumn) {
+            setDragOverColumn(columnId);
         }
     };
 
-    /* -------------------------------------------------------------
-     * ۹) تعریف ستون‌ها (۳۳ ستون کامل)
-     * ------------------------------------------------------------- */
-    const columns = useMemo(() => [
-        {
-            id: "id",
-            header: "#",
-            accessorKey: "id",
-            enableHiding: false,
-            cell: ({ row }) => (
-                <div>
-                    <b>{row.original.id}</b>
-                    {row.original.itemId && (
-                        <div style={{ fontSize: "10px", color: "#999" }}>
-                            ID: {row.original.itemId}
-                        </div>
-                    )}
-                </div>
-            ),
-        },
+    const handleDrop = (e, targetColumnId) => {
+        e.preventDefault();
+        setDragOverColumn(null);
 
-        // شناسه ملی کالا
-        {
-            id: "nationalProductId",
-            accessorKey: "nationalProductId",
-            header: COLUMN_LABELS.nationalProductId,
-            cell: ({ row, table }) => (
-                <Input
-                    bsSize="sm"
-                    type="text"
-                    value={row.original.nationalProductId || ""}
-                    onChange={(e) =>
-                        table.options.meta.updateData(row.index, "nationalProductId", e.target.value)
-                    }
-                    data-row={row.index}
-                    data-col="nationalProductId"
-                    onKeyDown={handleNavigate}
-                />
-            ),
-        },
+        if (draggedColumn && draggedColumn !== targetColumnId) {
+            setSettings((prev) => {
+                const newOrder = [...prev.columnOrder];
+                const draggedIndex = newOrder.indexOf(draggedColumn);
+                const targetIndex = newOrder.indexOf(targetColumnId);
 
-        // شرح کالا
-        {
-            id: "productDescription",
-            accessorKey: "productDescription",
-            header: COLUMN_LABELS.productDescription,
-            cell: ({ row, table }) => (
-                <Input
-                    bsSize="sm"
-                    type="text"
-                    value={row.original.productDescription || ""}
-                    onChange={(e) =>
-                        table.options.meta.updateData(row.index, "productDescription", e.target.value)
-                    }
-                    data-row={row.index}
-                    data-col="productDescription"
-                    onKeyDown={handleNavigate}
-                />
-            ),
-        },
+                newOrder.splice(draggedIndex, 1);
+                newOrder.splice(targetIndex, 0, draggedColumn);
 
-        // گروه کالا – داینامیک
-        {
-            id: "group",
-            accessorKey: "group",
-            header: COLUMN_LABELS.group,
-            cell: ({ row, table }) => {
-                const groupValue = row.original.group;
+                return {
+                    ...prev,
+                    columnOrder: newOrder,
+                };
+            });
+        }
+        setDraggedColumn(null);
+    };
 
-                return (
-                    <Input
-                        type="select"
-                        bsSize="sm"
-                        value={groupValue || ""}
-                        onChange={async (e) => {
-                            const catId = e.target.value;
+    /* --- بازنشانی تنظیمات --- */
+    const resetSettings = () => {
+        const defaultSettings = {
+            columnOrder: DEFAULT_COLUMN_ORDER,
+            columnWidths: DEFAULT_COLUMN_WIDTHS,
+            columnVisibility: DEFAULT_VIS,
+        };
+        setSettings(defaultSettings);
+        saveSettings(defaultSettings);
+    };
 
-                            table.options.meta.updateData(row.index, "group", catId);
-                            table.options.meta.updateData(row.index, "description", "");
-
-                            await loadProductsForCategory(catId);
+    /* --- تعریف ستون‌ها --- */
+    const allColumns = useMemo(
+        () => ({
+            actions: {
+                id: "actions",
+                header: () => (
+                    <Button
+                        color="success"
+                        size="sm"
+                        onClick={addRow}
+                        style={{
+                            ...styles.actionBtn,
+                            boxShadow: "0 2px 6px rgba(52, 195, 143, 0.4)",
                         }}
-                        data-row={row.index}
-                        data-col="group"
-                        onKeyDown={handleNavigate}
                     >
-                        <option value="">انتخاب</option>
-                        {Array.isArray(categories) && categories.map((c) => (
-                            <option key={c.id} value={c.id}>
-                                {c.name}
-                            </option>
-                        ))}
-                    </Input>
-                );
-            },
-        },
-
-        // نام کالا – داینامیک
-        {
-            id: "description",
-            accessorKey: "description",
-            header: COLUMN_LABELS.description,
-            cell: ({ row, table }) => {
-                const catId = row.original.group;
-                const value = row.original.description;
-                const items = productsByCat[catId] || [];
-
-                return (
-                    <Input
-                        type="select"
-                        bsSize="sm"
-                        disabled={!catId}
-                        value={value || ""}
-                        onChange={(e) =>
-                            table.options.meta.updateData(row.index, "description", e.target.value)
-                        }
-                        data-row={row.index}
-                        data-col="description"
-                        onKeyDown={handleNavigate}
+                        <i className="bx bx-plus"></i>
+                    </Button>
+                ),
+                cell: ({ row }) => (
+                    <Button
+                        color="danger"
+                        size="sm"
+                        outline
+                        onClick={() => deleteRow(row.original.id)}
+                        style={styles.actionBtn}
                     >
-                        <option value="">{catId ? "انتخاب" : "-"}</option>
-
-                        {Array.isArray(items) && items.map((p) => (
-                            <option key={p.id} value={p.id}>
-                                {p.name}
-                            </option>
-                        ))}
-                    </Input>
-                );
+                        <i className="bx bx-trash-alt"></i>
+                    </Button>
+                ),
             },
-        },
+            id: {
+                id: "id",
+                header: "#",
+                accessorKey: "id",
+                cell: ({ getValue }) => (
+                    <Badge
+                        color="light"
+                        style={{
+                            ...styles.badge,
+                            color: SKOTE_COLORS.primary,
+                            backgroundColor: "rgba(85, 110, 230, 0.1)",
+                        }}
+                    >
+                        {getValue()}
+                    </Badge>
+                ),
+            },
+            nationalProductId: {
+                id: "nationalProductId",
+                header: COLUMN_LABELS.nationalProductId,
+                accessorKey: "nationalProductId",
+                cell: (p) => <EditableCell {...p} updateData={updateData} type="text" />,
+            },
+            categoryId: {
+                id: "categoryId",
+                header: COLUMN_LABELS.categoryId,
+                cell: ({ row }) => (
+                    <select
+                        className="form-select form-select-sm"
+                        value={row.original.categoryId || ""}
+                        onChange={(e) => updateData(row.index, "categoryId", e.target.value)}
+                        style={styles.select}
+                    >
+                        <option value="">انتخاب...</option>
+                        {categories.map((c) => (
+                            <option key={c.id} value={c.id}>{c.name}</option>
+                        ))}
+                    </select>
+                ),
+            },
+            productId: {
+                id: "productId",
+                header: COLUMN_LABELS.productId,
+                cell: ({ row }) => (
+                    <select
+                        className="form-select form-select-sm"
+                        value={row.original.productId || ""}
+                        onChange={(e) => updateData(row.index, "productId", e.target.value)}
+                        style={styles.select}
+                    >
+                        <option value="">انتخاب...</option>
+                        {(productsByCat[row.original.categoryId] || []).map((p) => (
+                            <option key={p.id} value={p.id}>{p.name}</option>
+                        ))}
+                    </select>
+                ),
+            },
+            productDescription: {
+                id: "productDescription",
+                header: COLUMN_LABELS.productDescription,
+                accessorKey: "productDescription",
+                cell: (p) => <EditableCell {...p} updateData={updateData} type="text" />,
+            },
+            productionType: {
+                id: "productionType",
+                header: COLUMN_LABELS.productionType,
+                cell: ({ row }) => (
+                    <select
+                        className="form-select form-select-sm"
+                        value={row.original.productionType || "domestic"}
+                        onChange={(e) => updateData(row.index, "productionType", e.target.value)}
+                        style={styles.select}
+                    >
+                        <option value="domestic">داخلی</option>
+                        <option value="import">وارداتی</option>
+                    </select>
+                ),
+            },
+            count: {
+                id: "count",
+                header: COLUMN_LABELS.count,
+                accessorKey: "count",
+                cell: (p) => <EditableCell {...p} updateData={updateData} type="number" />,
+            },
+            unit: {
+                id: "unit",
+                header: COLUMN_LABELS.unit,
+                cell: ({ row }) => (
+                    <select
+                        className="form-select form-select-sm"
+                        value={row.original.unit || "kg"}
+                        onChange={(e) => updateData(row.index, "unit", e.target.value)}
+                        style={styles.select}
+                    >
+                        <option value="kg">کیلو</option>
+                        <option value="ton">تن</option>
+                        <option value="pcs">عدد</option>
+                    </select>
+                ),
+            },
+            fullWeight: {
+                id: "fullWeight",
+                header: COLUMN_LABELS.fullWeight,
+                accessorKey: "fullWeight",
+                cell: (p) => <EditableCell {...p} updateData={updateData} type="number" />,
+            },
+            emptyWeight: {
+                id: "emptyWeight",
+                header: COLUMN_LABELS.emptyWeight,
+                accessorKey: "emptyWeight",
+                cell: (p) => <EditableCell {...p} updateData={updateData} type="number" />,
+            },
+            netWeight: {
+                id: "netWeight",
+                header: COLUMN_LABELS.netWeight,
+                cell: ({ row }) => (
+                    <Badge color="primary" style={{ ...styles.badge, fontSize: "0.8rem" }}>
+                        {Number(row.original.netWeight || 0).toLocaleString()}
+                    </Badge>
+                ),
+            },
+            originWeight: {
+                id: "originWeight",
+                header: COLUMN_LABELS.originWeight,
+                accessorKey: "originWeight",
+                cell: (p) => <EditableCell {...p} updateData={updateData} type="number" />,
+            },
+            weightDiff: {
+                id: "weightDiff",
+                header: COLUMN_LABELS.weightDiff,
+                cell: ({ row }) => {
+                    const v = Number(row.original.weightDiff || 0);
+                    return (
+                        <Badge
+                            color={v > 0 ? "success" : v < 0 ? "danger" : "secondary"}
+                            style={styles.badge}
+                        >
+                            {v > 0 ? "+" : ""}{v.toLocaleString()}
+                        </Badge>
+                    );
+                },
+            },
+            isUsed: {
+                id: "isUsed",
+                header: COLUMN_LABELS.isUsed,
+                cell: ({ row }) => (
+                    <div className="form-check d-flex justify-content-center">
+                        <input
+                            type="checkbox"
+                            className="form-check-input"
+                            checked={row.original.isUsed || false}
+                            onChange={(e) => updateData(row.index, "isUsed", e.target.checked)}
+                            style={{ width: "18px", height: "18px", cursor: "pointer" }}
+                        />
+                    </div>
+                ),
+            },
+            isDefective: {
+                id: "isDefective",
+                header: COLUMN_LABELS.isDefective,
+                cell: ({ row }) => (
+                    <div className="form-check d-flex justify-content-center">
+                        <input
+                            type="checkbox"
+                            className="form-check-input"
+                            checked={row.original.isDefective || false}
+                            onChange={(e) => updateData(row.index, "isDefective", e.target.checked)}
+                            style={{ width: "18px", height: "18px", cursor: "pointer" }}
+                        />
+                    </div>
+                ),
+            },
+            length: {
+                id: "length",
+                header: COLUMN_LABELS.length,
+                accessorKey: "length",
+                cell: (p) => <EditableCell {...p} updateData={updateData} type="number" />,
+            },
+            width: {
+                id: "width",
+                header: COLUMN_LABELS.width,
+                accessorKey: "width",
+                cell: (p) => <EditableCell {...p} updateData={updateData} type="number" />,
+            },
+            thickness: {
+                id: "thickness",
+                header: COLUMN_LABELS.thickness,
+                accessorKey: "thickness",
+                cell: (p) => <EditableCell {...p} updateData={updateData} type="number" />,
+            },
+            heatNumber: {
+                id: "heatNumber",
+                header: COLUMN_LABELS.heatNumber,
+                accessorKey: "heatNumber",
+                cell: (p) => <EditableCell {...p} updateData={updateData} type="text" />,
+            },
+            bundleNo: {
+                id: "bundleNo",
+                header: COLUMN_LABELS.bundleNo,
+                accessorKey: "bundleNo",
+                cell: (p) => <EditableCell {...p} updateData={updateData} type="text" />,
+            },
+            brand: {
+                id: "brand",
+                header: COLUMN_LABELS.brand,
+                accessorKey: "brand",
+                cell: (p) => <EditableCell {...p} updateData={updateData} type="text" />,
+            },
+            orderNo: {
+                id: "orderNo",
+                header: COLUMN_LABELS.orderNo,
+                accessorKey: "orderNo",
+                cell: (p) => <EditableCell {...p} updateData={updateData} type="text" />,
+            },
+            parentRow: {
+                id: "parentRow",
+                header: COLUMN_LABELS.parentRow,
+                accessorKey: "parentRow",
+                cell: (p) => <EditableCell {...p} updateData={updateData} type="text" />,
+            },
+            depoLocation: {
+                id: "depoLocation",
+                header: COLUMN_LABELS.depoLocation,
+                accessorKey: "depoLocation",
+                cell: (p) => <EditableCell {...p} updateData={updateData} type="text" />,
+            },
+            descriptionNotes: {
+                id: "descriptionNotes",
+                header: COLUMN_LABELS.descriptionNotes,
+                accessorKey: "descriptionNotes",
+                cell: (p) => <EditableCell {...p} updateData={updateData} type="text" />,
+            },
+            rowCode: {
+                id: "rowCode",
+                header: COLUMN_LABELS.rowCode,
+                accessorKey: "rowCode",
+                cell: (p) => <EditableCell {...p} updateData={updateData} type="text" />,
+            },
+        }),
+        [categories, productsByCat, updateData]
+    );
 
-        // تعداد
-        {
-            id: "count",
-            accessorKey: "count",
-            header: COLUMN_LABELS.count,
-            cell: ({ row, table }) => (
-                <Input
-                    type="number"
-                    bsSize="sm"
-                    value={row.original.count || ""}
-                    onChange={(e) =>
-                        table.options.meta.updateData(row.index, "count", e.target.value)
-                    }
-                    data-row={row.index}
-                    data-col="count"
-                    onKeyDown={handleNavigate}
-                />
-            ),
-        },
+    // ستون‌های مرتب‌شده و قابل نمایش
+    const visibleColumnIds = useMemo(
+        () => columnOrder.filter((id) => columnVisibility[id] !== false),
+        [columnOrder, columnVisibility]
+    );
 
-        // واحد
-        {
-            id: "unit",
-            accessorKey: "unit",
-            header: COLUMN_LABELS.unit,
-            cell: ({ row, table }) => (
-                <Input
-                    type="select"
-                    bsSize="sm"
-                    value={row.original.unit || ""}
-                    onChange={(e) =>
-                        table.options.meta.updateData(row.index, "unit", e.target.value)
-                    }
-                    data-row={row.index}
-                    data-col="unit"
-                    onKeyDown={handleNavigate}
-                >
-                    <option value="">انتخاب</option>
-                    <option value="kg">کیلو</option>
-                    <option value="ton">تن</option>
-                    <option value="num">عدد</option>
-                    <option value="m">متر</option>
-                </Input>
-            ),
-        },
+    const columns = useMemo(
+        () => visibleColumnIds.map((id) => allColumns[id]),
+        [visibleColumnIds, allColumns]
+    );
 
-        // نوع تولید
-        {
-            id: "productionType",
-            accessorKey: "productionType",
-            header: COLUMN_LABELS.productionType,
-            cell: ({ row, table }) => (
-                <Input
-                    type="select"
-                    bsSize="sm"
-                    value={row.original.productionType || ""}
-                    onChange={(e) =>
-                        table.options.meta.updateData(row.index, "productionType", e.target.value)
-                    }
-                    data-row={row.index}
-                    data-col="productionType"
-                    onKeyDown={handleNavigate}
-                >
-                    <option value="">انتخاب</option>
-                    <option value="domestic">داخلی</option>
-                    <option value="import">وارداتی</option>
-                </Input>
-            ),
-        },
-
-        // مستعمل
-        {
-            id: "isUsed",
-            accessorKey: "isUsed",
-            header: COLUMN_LABELS.isUsed,
-            cell: ({ row, table }) => (
-                <Input
-                    type="checkbox"
-                    checked={row.original.isUsed || false}
-                    onChange={(e) =>
-                        table.options.meta.updateData(row.index, "isUsed", e.target.checked)
-                    }
-                    data-row={row.index}
-                    data-col="isUsed"
-                    onKeyDown={handleNavigate}
-                />
-            ),
-        },
-
-        // معیوب
-        {
-            id: "isDefective",
-            accessorKey: "isDefective",
-            header: COLUMN_LABELS.isDefective,
-            cell: ({ row, table }) => (
-                <Input
-                    type="checkbox"
-                    checked={row.original.isDefective || false}
-                    onChange={(e) =>
-                        table.options.meta.updateData(row.index, "isDefective", e.target.checked)
-                    }
-                    data-row={row.index}
-                    data-col="isDefective"
-                    onKeyDown={handleNavigate}
-                />
-            ),
-        },
-
-        // وزن پر
-        {
-            id: "fullWeight",
-            accessorKey: "fullWeight",
-            header: COLUMN_LABELS.fullWeight,
-            cell: ({ row, table }) => (
-                <Input
-                    type="number"
-                    bsSize="sm"
-                    value={row.original.fullWeight || ""}
-                    onChange={(e) => {
-                        table.options.meta.updateData(row.index, "fullWeight", e.target.value);
-                        const full = parseFloat(e.target.value) || 0;
-                        const empty = parseFloat(row.original.emptyWeight) || 0;
-                        const origin = parseFloat(row.original.originWeight) || 0;
-                        const net = full - empty;
-                        table.options.meta.updateData(row.index, "netWeight", net);
-                        table.options.meta.updateData(row.index, "weightDiff", net - origin);
-                    }}
-                    data-row={row.index}
-                    data-col="fullWeight"
-                    onKeyDown={handleNavigate}
-                />
-            ),
-        },
-
-        // وزن خالی
-        {
-            id: "emptyWeight",
-            accessorKey: "emptyWeight",
-            header: COLUMN_LABELS.emptyWeight,
-            cell: ({ row, table }) => (
-                <Input
-                    type="number"
-                    bsSize="sm"
-                    value={row.original.emptyWeight || ""}
-                    onChange={(e) => {
-                        table.options.meta.updateData(row.index, "emptyWeight", e.target.value);
-                        const empty = parseFloat(e.target.value) || 0;
-                        const full = parseFloat(row.original.fullWeight) || 0;
-                        const origin = parseFloat(row.original.originWeight) || 0;
-                        const net = full - empty;
-                        table.options.meta.updateData(row.index, "netWeight", net);
-                        table.options.meta.updateData(row.index, "weightDiff", net - origin);
-                    }}
-                    data-row={row.index}
-                    data-col="emptyWeight"
-                    onKeyDown={handleNavigate}
-                />
-            ),
-        },
-
-        // وزن خالص
-        {
-            id: "netWeight",
-            accessorKey: "netWeight",
-            header: COLUMN_LABELS.netWeight,
-            cell: ({ row }) => (
-                <b className="text-primary">
-                    {(row.original.netWeight || 0).toLocaleString("fa-IR")}
-                </b>
-            ),
-        },
-
-        // وزن مبدا
-        {
-            id: "originWeight",
-            accessorKey: "originWeight",
-            header: COLUMN_LABELS.originWeight,
-            cell: ({ row, table }) => (
-                <Input
-                    type="number"
-                    bsSize="sm"
-                    value={row.original.originWeight || ""}
-                    onChange={(e) => {
-                        table.options.meta.updateData(row.index, "originWeight", e.target.value);
-
-                        const origin = parseFloat(e.target.value) || 0;
-                        const net = parseFloat(row.original.netWeight) || 0;
-
-                        table.options.meta.updateData(row.index, "weightDiff", net - origin);
-                    }}
-                    data-row={row.index}
-                    data-col="originWeight"
-                    onKeyDown={handleNavigate}
-                />
-            ),
-        },
-
-        // اختلاف وزن
-        {
-            id: "weightDiff",
-            accessorKey: "weightDiff",
-            header: COLUMN_LABELS.weightDiff,
-            cell: ({ row }) => (
-                <b
-                    className={
-                        row.original.weightDiff > 0
-                            ? "text-danger"
-                            : "text-success"
-                    }
-                >
-                    {(row.original.weightDiff || 0).toLocaleString("fa-IR")}
-                </b>
-            ),
-        },
-
-        // طول
-        {
-            id: "length",
-            accessorKey: "length",
-            header: COLUMN_LABELS.length,
-            cell: ({ row, table }) => (
-                <Input
-                    type="number"
-                    bsSize="sm"
-                    value={row.original.length || ""}
-                    onChange={(e) =>
-                        table.options.meta.updateData(row.index, "length", e.target.value)
-                    }
-                    data-row={row.index}
-                    data-col="length"
-                    onKeyDown={handleNavigate}
-                />
-            ),
-        },
-
-        // عرض
-        {
-            id: "width",
-            accessorKey: "width",
-            header: COLUMN_LABELS.width,
-            cell: ({ row, table }) => (
-                <Input
-                    type="number"
-                    bsSize="sm"
-                    value={row.original.width || ""}
-                    onChange={(e) =>
-                        table.options.meta.updateData(row.index, "width", e.target.value)
-                    }
-                    data-row={row.index}
-                    data-col="width"
-                    onKeyDown={handleNavigate}
-                />
-            ),
-        },
-
-        // ضخامت
-        {
-            id: "thickness",
-            accessorKey: "thickness",
-            header: COLUMN_LABELS.thickness,
-            cell: ({ row, table }) => (
-                <Input
-                    type="number"
-                    bsSize="sm"
-                    value={row.original.thickness || ""}
-                    onChange={(e) =>
-                        table.options.meta.updateData(row.index, "thickness", e.target.value)
-                    }
-                    data-row={row.index}
-                    data-col="thickness"
-                    onKeyDown={handleNavigate}
-                />
-            ),
-        },
-
-        // Heat No
-        {
-            id: "heatNumber",
-            accessorKey: "heatNumber",
-            header: COLUMN_LABELS.heatNumber,
-            cell: ({ row, table }) => (
-                <Input
-                    type="text"
-                    bsSize="sm"
-                    value={row.original.heatNumber || ""}
-                    onChange={(e) =>
-                        table.options.meta.updateData(row.index, "heatNumber", e.target.value)
-                    }
-                    data-row={row.index}
-                    data-col="heatNumber"
-                    onKeyDown={handleNavigate}
-                />
-            ),
-        },
-
-        // شماره بسته
-        {
-            id: "bundleNo",
-            accessorKey: "bundleNo",
-            header: COLUMN_LABELS.bundleNo,
-            cell: ({ row, table }) => (
-                <Input
-                    type="text"
-                    bsSize="sm"
-                    value={row.original.bundleNo || ""}
-                    onChange={(e) =>
-                        table.options.meta.updateData(row.index, "bundleNo", e.target.value)
-                    }
-                    data-row={row.index}
-                    data-col="bundleNo"
-                    onKeyDown={handleNavigate}
-                />
-            ),
-        },
-
-        // برند
-        {
-            id: "brand",
-            accessorKey: "brand",
-            header: COLUMN_LABELS.brand,
-            cell: ({ row, table }) => (
-                <Input
-                    type="text"
-                    bsSize="sm"
-                    value={row.original.brand || ""}
-                    onChange={(e) =>
-                        table.options.meta.updateData(row.index, "brand", e.target.value)
-                    }
-                    data-row={row.index}
-                    data-col="brand"
-                    onKeyDown={handleNavigate}
-                />
-            ),
-        },
-
-        // شماره سفارش
-        {
-            id: "orderNo",
-            accessorKey: "orderNo",
-            header: COLUMN_LABELS.orderNo,
-            cell: ({ row, table }) => (
-                <Input
-                    type="text"
-                    bsSize="sm"
-                    value={row.original.orderNo || ""}
-                    onChange={(e) =>
-                        table.options.meta.updateData(row.index, "orderNo", e.target.value)
-                    }
-                    data-row={row.index}
-                    data-col="orderNo"
-                    onKeyDown={handleNavigate}
-                />
-            ),
-        },
-
-        // محل دپو
-        {
-            id: "depoLocation",
-            accessorKey: "depoLocation",
-            header: COLUMN_LABELS.depoLocation,
-            cell: ({ row, table }) => (
-                <Input
-                    type="text"
-                    bsSize="sm"
-                    value={row.original.depoLocation || ""}
-                    onChange={(e) =>
-                        table.options.meta.updateData(row.index, "depoLocation", e.target.value)
-                    }
-                    data-row={row.index}
-                    data-col="depoLocation"
-                    onKeyDown={handleNavigate}
-                />
-            ),
-        },
-
-        // توضیحات
-        {
-            id: "descriptionNotes",
-            accessorKey: "descriptionNotes",
-            header: COLUMN_LABELS.descriptionNotes,
-            cell: ({ row, table }) => (
-                <Input
-                    type="text"
-                    bsSize="sm"
-                    value={row.original.descriptionNotes || ""}
-                    onChange={(e) =>
-                        table.options.meta.updateData(row.index, "descriptionNotes", e.target.value)
-                    }
-                    data-row={row.index}
-                    data-col="descriptionNotes"
-                    onKeyDown={handleNavigate}
-                />
-            ),
-        },
-
-        // ردیف
-        {
-            id: "row",
-            accessorKey: "row",
-            header: COLUMN_LABELS.row,
-            cell: ({ row, table }) => (
-                <Input
-                    type="text"
-                    bsSize="sm"
-                    value={row.original.row || ""}
-                    onChange={(e) =>
-                        table.options.meta.updateData(row.index, "row", e.target.value)
-                    }
-                    data-row={row.index}
-                    data-col="row"
-                    onKeyDown={handleNavigate}
-                />
-            ),
-        },
-
-        // عملیات حذف
-        {
-            id: "actions",
-            header: "عملیات",
-            enableHiding: false,
-            cell: ({ row }) => (
-                <Button
-                    color="danger"
-                    size="sm"
-                    onClick={() => deleteRow(row.original.id)}
-                >
-                    حذف
-                </Button>
-            ),
-        },
-    ], [categories, productsByCat]);
-
-    /* -------------------------------------------------------------
-     * ۱۰) ساخت جدول TanStack
-     * ------------------------------------------------------------- */
     const table = useReactTable({
         data,
         columns,
-        state: { sorting, globalFilter, columnVisibility },
         getCoreRowModel: getCoreRowModel(),
         getFilteredRowModel: getFilteredRowModel(),
-        getSortedRowModel: getSortedRowModel(),
-        getPaginationRowModel: getPaginationRowModel(),
-        onSortingChange: setSorting,
-        onGlobalFilterChange: setGlobalFilter,
-        onColumnVisibilityChange: (val) => {
-            setColumnVisibility(val);
-            try {
-                localStorage.setItem("receiptColumns", JSON.stringify(val));
-            } catch (err) {
-                console.error("Error saving column visibility:", err);
-            }
-        },
-        meta: {
-            updateData: (rowIndex, columnId, value) => {
-                console.log(`🔄 updateData called: row=${rowIndex}, column=${columnId}, value=${value}`);
-                
-                setData((prev) => {
-                    const newData = prev.map((row, idx) =>
-                        idx === rowIndex ? { 
-                            ...row, 
-                            [columnId]: value 
-                            // ⭐ itemId تغییر نمی‌کند، فقط مقادیر دیگر
-                        } : row
-                    );
-                    
-                    console.log(`✅ Row ${rowIndex} updated:`, newData[rowIndex]);
-                    return newData;
-                });
-            },
-        },
     });
 
-    /* -------------------------------------------------------------
-     * UI نهایی
-     * ------------------------------------------------------------- */
     return (
-        <div className="receipt-card" ref={tableRef}>
+        <Card style={styles.card}>
+            {/* هدر */}
+            <CardHeader style={styles.cardHeader}>
+                <Row className="align-items-center">
+                    <Col>
+                        <h5 style={styles.cardTitle}>
+                            <i className="bx bx-package me-2"></i>
+                            اقلام رسید
+                        </h5>
+                    </Col>
+                    <Col xs="auto">
+                        <div className="d-flex gap-2">
+                            <Button
+                                color="light"
+                                size="sm"
+                                onClick={resetSettings}
+                                style={{
+                                    ...styles.actionBtn,
+                                    backgroundColor: "rgba(255,255,255,0.2)",
+                                    border: "none",
+                                    color: "#fff",
+                                }}
+                                title="بازنشانی تنظیمات"
+                            >
+                                <i className="bx bx-reset me-1"></i>
+                                بازنشانی
+                            </Button>
+                            <Button
+                                color="light"
+                                size="sm"
+                                onClick={() => setShowColumnModal(true)}
+                                style={{
+                                    ...styles.actionBtn,
+                                    backgroundColor: "rgba(255,255,255,0.2)",
+                                    border: "none",
+                                    color: "#fff",
+                                }}
+                            >
+                                <i className="bx bx-cog me-1"></i>
+                                ستون‌ها
+                            </Button>
+                        </div>
+                    </Col>
+                </Row>
+            </CardHeader>
 
-            {/* Toolbar */}
-            <Row className="items-toolbar mb-2">
-                <Col md="6">
-                    <div className="d-flex gap-2">
-                        <Input
-                            placeholder="جستجو..."
-                            value={globalFilter || ""}
-                            onChange={(e) => setGlobalFilter(e.target.value)}
-                            className="search-input"
+            <CardBody style={{ padding: "1.25rem" }}>
+                {/* آمار */}
+                <Row className="mb-3 g-3">
+                    <Col md={4}>
+                        <StatCard
+                            icon="bx bx-box"
+                            label="تعداد ردیف"
+                            value={summary.items.toLocaleString("fa-IR")}
+                            color={SKOTE_COLORS.primary}
+                            bgColor="rgba(85, 110, 230, 0.1)"
                         />
+                    </Col>
+                    <Col md={4}>
+                        <StatCard
+                            icon="bx bx-layer"
+                            label="جمع تعداد"
+                            value={summary.count.toLocaleString("fa-IR")}
+                            color={SKOTE_COLORS.success}
+                            bgColor="rgba(52, 195, 143, 0.1)"
+                        />
+                    </Col>
+                    <Col md={4}>
+                        <StatCard
+                            icon="bx bx-cylinder"
+                            label="وزن خالص کل"
+                            value={`${summary.netWeight.toLocaleString("fa-IR")} کیلو`}
+                            color={SKOTE_COLORS.info}
+                            bgColor="rgba(80, 165, 241, 0.1)"
+                        />
+                    </Col>
+                </Row>
 
-                        <Button color="success" onClick={addRow}>
-                            + افزودن ردیف
-                        </Button>
-                    </div>
-                </Col>
+                {/* راهنما */}
+                <div
+                    className="alert d-flex align-items-center mb-3"
+                    style={{
+                        fontSize: "0.8rem",
+                        padding: "0.5rem 1rem",
+                        backgroundColor: "rgba(80, 165, 241, 0.1)",
+                        border: "none",
+                        color: SKOTE_COLORS.info,
+                        borderRadius: "0.25rem",
+                    }}
+                >
+                    <i className="bx bx-info-circle me-2"></i>
+                    برای جابجایی ستون‌ها، هدر را بکشید. برای تغییر اندازه، لبه چپ هدر را بکشید. تنظیمات خودکار ذخیره می‌شود.
+                </div>
 
-                <Col md="6" className="text-end">
-                    <Button color="secondary" onClick={() => setShowColumnModal(true)}>
-                        مدیریت ستون‌ها
-                    </Button>
-                </Col>
-            </Row>
-
-            {/* جدول */}
-            <div className="table-responsive">
-                <Table bordered className="items-table mb-0">
-                    <thead>
-                        {table.getHeaderGroups().map((hg) => (
-                            <tr key={hg.id}>
-                                {hg.headers.map((h) => (
-                                    <th key={h.id}>
-                                        {flexRender(h.column.columnDef.header, h.getContext())}
-                                    </th>
+                {/* جدول */}
+                <div style={styles.tableWrapper}>
+                    <Table
+                        hover
+                        responsive
+                        className="table-nowrap mb-0 align-middle"
+                        style={styles.table}
+                    >
+                        <thead style={styles.tableHead}>
+                        <tr>
+                            {visibleColumnIds.map((columnId) => {
+                                const col = allColumns[columnId];
+                                return (
+                                    <DraggableHeader
+                                        key={columnId}
+                                        columnId={columnId}
+                                        columnWidth={columnWidths[columnId] || 100}
+                                        onResize={handleColumnResize}
+                                        onDragStart={handleDragStart}
+                                        onDragOver={handleDragOver}
+                                        onDrop={handleDrop}
+                                        isDragging={draggedColumn === columnId}
+                                        isDragOver={dragOverColumn === columnId}
+                                    >
+                                        {typeof col.header === "function" ? col.header() : col.header}
+                                    </DraggableHeader>
+                                );
+                            })}
+                        </tr>
+                        </thead>
+                        <tbody>
+                        {table.getRowModel().rows.map((row) => (
+                            <tr
+                                key={row.id}
+                                onMouseEnter={() => setHoveredRow(row.id)}
+                                onMouseLeave={() => setHoveredRow(null)}
+                                style={{
+                                    backgroundColor:
+                                        hoveredRow === row.id ? SKOTE_COLORS.tableHover : "transparent",
+                                    transition: "background-color 0.15s ease",
+                                }}
+                            >
+                                {row.getVisibleCells().map((cell) => (
+                                    <td
+                                        key={cell.id}
+                                        style={{
+                                            ...styles.td,
+                                            width: columnWidths[cell.column.id] || 100,
+                                            minWidth: columnWidths[cell.column.id] || 100,
+                                            maxWidth: columnWidths[cell.column.id] || 100,
+                                        }}
+                                    >
+                                        {flexRender(cell.column.columnDef.cell, cell.getContext())}
+                                    </td>
                                 ))}
                             </tr>
                         ))}
-                    </thead>
+                        </tbody>
 
-                    <tbody>
-                        {table.getRowModel().rows.length ? (
-                            table.getRowModel().rows.map((row) => (
-                                <tr key={row.id}>
-                                    {row.getVisibleCells().map((cell) => (
-                                        <td key={cell.id}>
-                                            {flexRender(cell.column.columnDef.cell, cell.getContext())}
-                                        </td>
-                                    ))}
-                                </tr>
-                            ))
-                        ) : (
-                            <tr>
-                                <td colSpan={table.getVisibleLeafColumns().length} className="text-center py-4 text-muted">
-                                    هیچ ردیفی ثبت نشده است
+                        {data.length > 0 && (
+                            <tfoot>
+                            <tr style={styles.summaryRow}>
+                                <td
+                                    colSpan={columns.length - 3}
+                                    style={{ ...styles.td, textAlign: "left", paddingRight: "1rem" }}
+                                >
+                                    <strong>
+                                        <i className="bx bx-calculator me-2"></i>
+                                        جمع کل
+                                    </strong>
+                                </td>
+                                <td style={{ ...styles.td, textAlign: "center" }}>
+                                    <Badge color="success" style={{ ...styles.badge, fontSize: "0.85rem" }}>
+                                        {summary.count.toLocaleString("fa-IR")}
+                                    </Badge>
+                                </td>
+                                <td style={styles.td}></td>
+                                <td colSpan={2} style={{ ...styles.td, textAlign: "center" }}>
+                                    <Badge color="primary" style={{ ...styles.badge, fontSize: "0.85rem" }}>
+                                        {summary.netWeight.toLocaleString("fa-IR")} کیلو
+                                    </Badge>
                                 </td>
                             </tr>
+                            </tfoot>
                         )}
-                    </tbody>
-                </Table>
-            </div>
+                    </Table>
+                </div>
 
-            {/* مدیریت ستون‌ها */}
+                {/* حالت خالی */}
+                {data.length === 0 && (
+                    <div className="text-center py-5" style={{ color: SKOTE_COLORS.muted }}>
+                        <i className="bx bx-inbox" style={{ fontSize: "3rem", opacity: 0.5 }}></i>
+                        <p className="mt-2 mb-0">هیچ کالایی اضافه نشده است</p>
+                        <Button
+                            color="primary"
+                            size="sm"
+                            onClick={addRow}
+                            className="mt-3"
+                            style={{ ...styles.actionBtn, padding: "0.5rem 1.5rem" }}
+                        >
+                            <i className="bx bx-plus me-1"></i>
+                            افزودن اولین کالا
+                        </Button>
+                    </div>
+                )}
+            </CardBody>
+
+            {/* مودال مدیریت ستون‌ها */}
             <ColumnManagerModal
                 isOpen={showColumnModal}
                 toggle={() => setShowColumnModal(false)}
                 columnVisibility={columnVisibility}
                 columnLabels={COLUMN_LABELS}
-                onToggleColumn={(key) =>
-                    setColumnVisibility((prev) => ({
+                onToggleColumn={(vis) => {
+                    setSettings((prev) => ({
                         ...prev,
-                        [key]: !prev[key],
-                    }))
-                }
+                        columnVisibility: vis,
+                    }));
+                }}
             />
-        </div>
+        </Card>
     );
 };
 

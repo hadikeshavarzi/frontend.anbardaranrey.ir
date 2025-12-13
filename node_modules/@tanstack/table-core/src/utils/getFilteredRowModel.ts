@@ -1,4 +1,4 @@
-import { ResolvedColumnFilter } from '../features/Filters'
+import { ResolvedColumnFilter } from '../features/ColumnFiltering'
 import { Table, RowModel, Row, RowData } from '../types'
 import { getMemoOptions, memo } from '../utils'
 import { filterRows } from './filterRowsUtils'
@@ -53,7 +53,7 @@ export function getFilteredRowModel<TData extends RowData>(): (
           })
         })
 
-        const filterableIds = columnFilters.map(d => d.id)
+        const filterableIds = (columnFilters ?? []).map(d => d.id)
 
         const globalFilterFn = table.getGlobalFilterFn()
 

@@ -1,4 +1,3 @@
-// src/components/Receipt/ColumnManagerModal.jsx
 import React, { useState, useMemo } from "react";
 import {
     Modal,
@@ -12,34 +11,34 @@ import {
     Badge,
 } from "reactstrap";
 
-/* -------------------------------------------------------------
- *   گروه‌بندی ستون‌ها برای نمایش بهتر
- * ------------------------------------------------------------- */
+/* ------------------------------
+ * تعریف گروه‌بندی ستون‌ها بر اساس SQL Schema
+ * ------------------------------ */
 const COLUMN_GROUPS = {
     basic: {
         label: "اطلاعات پایه",
         icon: "ri-file-list-line",
-        columns: ["nationalProductId", "productDescription", "group", "description", "count", "unit", "row"],
+        columns: ["id", "rowCode", "categoryId", "productId", "nationalProductId", "productDescription", "productionType"],
     },
-    status: {
-        label: "وضعیت کالا",
-        icon: "ri-checkbox-circle-line",
-        columns: ["productionType", "isUsed", "isDefective"],
-    },
-    weight: {
-        label: "اطلاعات وزن",
+    quantity: {
+        label: "تعداد و وزن",
         icon: "ri-scales-line",
-        columns: ["fullWeight", "emptyWeight", "netWeight", "originWeight", "weightDiff"],
+        columns: ["count", "unit", "fullWeight", "emptyWeight", "netWeight", "originWeight", "weightDiff"],
     },
     dimensions: {
         label: "ابعاد",
         icon: "ri-ruler-line",
         columns: ["length", "width", "thickness"],
     },
+    status: {
+        label: "وضعیت کیفی",
+        icon: "ri-checkbox-circle-line",
+        columns: ["isUsed", "isDefective"],
+    },
     tracking: {
         label: "ردیابی و شناسایی",
         icon: "ri-barcode-line",
-        columns: ["heatNumber", "bundleNo", "brand", "orderNo"],
+        columns: ["heatNumber", "bundleNo", "brand", "orderNo", "parentRow"],
     },
     location: {
         label: "موقعیت و توضیحات",
@@ -49,231 +48,146 @@ const COLUMN_GROUPS = {
 };
 
 const ColumnManagerModal = ({
-                                isOpen = false,
-                                toggle = () => {},
+                                isOpen,
+                                toggle,
                                 columnVisibility = {},
                                 columnLabels = {},
-                                onToggleColumn = () => {},
+                                onToggleColumn // تابع آپدیت State والد
                             }) => {
-    const [searchTerm, setSearchTerm] = useState("");
+    const [search, setSearch] = useState("");
 
-    /* -------------------------------------------------------------
-     * اطمینان از وجود مقادیر - Defensive programming
-     * ------------------------------------------------------------- */
-    const safeColumnVisibility = columnVisibility ?? {};
-    const safeColumnLabels = columnLabels ?? {};
-
-    /* -------------------------------------------------------------
-     * فیلتر ستون‌ها بر اساس جستجو
-     * ------------------------------------------------------------- */
+    // --- فیلتر کردن گروه‌ها ---
     const filteredGroups = useMemo(() => {
-        if (!searchTerm.trim()) return COLUMN_GROUPS;
+        if (!search.trim()) return COLUMN_GROUPS;
+        const s = search.toLowerCase();
+        let res = {};
 
-        const filtered = {};
-        Object.entries(COLUMN_GROUPS).forEach(([groupKey, group]) => {
-            const matchingColumns = group.columns.filter((colKey) => {
-                const label = safeColumnLabels[colKey];
-                return label && label.toLowerCase().includes(searchTerm.toLowerCase());
+        Object.entries(COLUMN_GROUPS).forEach(([key, g]) => {
+            const cols = g.columns.filter((c) => {
+                const label = columnLabels[c];
+                return label && label.toLowerCase().includes(s);
             });
-
-            if (matchingColumns.length > 0) {
-                filtered[groupKey] = {
-                    ...group,
-                    columns: matchingColumns,
-                };
-            }
+            if (cols.length > 0) res[key] = { ...g, columns: cols };
         });
+        return res;
+    }, [search, columnLabels]);
 
-        return filtered;
-    }, [searchTerm, safeColumnLabels]);
-
-    /* -------------------------------------------------------------
-     * آمار ستون‌های فعال
-     * ------------------------------------------------------------- */
-    const stats = useMemo(() => {
-        const labelKeys = Object.keys(safeColumnLabels);
-        const total = labelKeys.length;
-        const visible = labelKeys.filter((key) => Boolean(safeColumnVisibility[key])).length;
-        return { total, visible };
-    }, [safeColumnVisibility, safeColumnLabels]);
-
-    /* -------------------------------------------------------------
-     * انتخاب/عدم انتخاب همه
-     * ------------------------------------------------------------- */
-    const handleSelectAll = () => {
-        Object.keys(safeColumnLabels).forEach((key) => {
-            if (!safeColumnVisibility[key]) {
-                onToggleColumn(key);
-            }
-        });
+    // --- هندل تغییر تیک ---
+    const handleToggle = (colKey) => {
+        const newVisibility = { ...columnVisibility, [colKey]: !columnVisibility[colKey] };
+        onToggleColumn(newVisibility);
     };
 
-    const handleDeselectAll = () => {
-        Object.keys(safeColumnLabels).forEach((key) => {
-            if (safeColumnVisibility[key]) {
-                onToggleColumn(key);
-            }
+    // --- انتخاب/حذف همه ---
+    const handleBulkChange = (enable) => {
+        const newVisibility = { ...columnVisibility };
+        Object.values(COLUMN_GROUPS).forEach(group => {
+            group.columns.forEach(col => newVisibility[col] = enable);
         });
+        onToggleColumn(newVisibility);
     };
 
-    /* -------------------------------------------------------------
-     * انتخاب/عدم انتخاب گروه
-     * ------------------------------------------------------------- */
-    const handleToggleGroup = (groupColumns, shouldEnable) => {
-        groupColumns.forEach((colKey) => {
-            const currentState = Boolean(safeColumnVisibility[colKey]);
-            if (currentState !== shouldEnable) {
-                onToggleColumn(colKey);
-            }
-        });
-    };
-
-    const isGroupFullySelected = (columns) =>
-        columns.every((col) => Boolean(safeColumnVisibility[col]));
-
-    const isGroupPartiallySelected = (columns) =>
-        columns.some((col) => Boolean(safeColumnVisibility[col])) && !isGroupFullySelected(columns);
-
-    /* -------------------------------------------------------------
-     * هندل کلیک روی آیتم
-     * ------------------------------------------------------------- */
-    const handleColumnToggle = (colKey) => {
-        onToggleColumn(colKey);
-    };
-
-    // اگر Modal بسته است، رندر نکن
-    if (!isOpen) return null;
+    const activeCount = Object.values(columnVisibility).filter(Boolean).length;
 
     return (
-        <Modal isOpen={isOpen} toggle={toggle} size="lg" className="column-manager-modal">
-            <ModalHeader toggle={toggle}>
-                <i className="ri-layout-4-line me-2"></i>
-                مدیریت ستون‌ها
-                <Badge color="primary" className="ms-2">
-                    {stats.visible} از {stats.total}
-                </Badge>
+        <Modal isOpen={isOpen} toggle={toggle} size="lg" scrollable centered>
+            <ModalHeader toggle={toggle} className="bg-light">
+                <div className="d-flex align-items-center gap-2">
+                    <i className="ri-layout-column-line"></i>
+                    مدیریت نمایش ستون‌ها
+                    <Badge color="primary" pill className="ms-2">{activeCount} ستون فعال</Badge>
+                </div>
             </ModalHeader>
 
-            <ModalBody>
-                {/* جستجو */}
-                <div className="search-wrapper mb-4">
-                    <i className="ri-search-line search-icon"></i>
-                    <Input
-                        placeholder="جستجوی ستون..."
-                        value={searchTerm}
-                        onChange={(e) => setSearchTerm(e.target.value)}
-                        className="search-input"
-                    />
-                    {searchTerm && (
-                        <Button
-                            color="link"
-                            className="clear-btn"
-                            onClick={() => setSearchTerm("")}
-                        >
-                            <i className="ri-close-line"></i>
+            <ModalBody className="p-4 bg-soft-light">
+                {/* جستجو و دکمه‌های کلی */}
+                <Row className="mb-4 align-items-center g-2">
+                    <Col md={6}>
+                        <div className="position-relative">
+                            <Input
+                                placeholder="جستجوی نام ستون..."
+                                value={search}
+                                onChange={(e) => setSearch(e.target.value)}
+                                style={{ paddingRight: '35px' }}
+                                className="bg-white border-light"
+                            />
+                            <i className="ri-search-line position-absolute top-50 translate-middle-y text-muted" style={{ right: '10px' }}></i>
+                        </div>
+                    </Col>
+                    <Col md={6} className="text-end">
+                        <Button size="sm" color="soft-success" className="me-2" onClick={() => handleBulkChange(true)}>
+                            انتخاب همه
                         </Button>
-                    )}
-                </div>
+                        <Button size="sm" color="soft-danger" onClick={() => handleBulkChange(false)}>
+                            حذف همه
+                        </Button>
+                    </Col>
+                </Row>
 
-                {/* دکمه‌های سریع */}
-                <div className="quick-actions mb-4">
-                    <Button
-                        color="success"
-                        size="sm"
-                        outline
-                        onClick={handleSelectAll}
-                    >
-                        <i className="ri-checkbox-multiple-line me-1"></i>
-                        انتخاب همه
-                    </Button>
-                    <Button
-                        color="secondary"
-                        size="sm"
-                        outline
-                        onClick={handleDeselectAll}
-                    >
-                        <i className="ri-checkbox-blank-line me-1"></i>
-                        حذف همه
-                    </Button>
-                </div>
-
-                {/* لیست گروه‌ها */}
-                <div className="column-groups">
-                    {Object.entries(filteredGroups).map(([groupKey, group]) => {
-                        const isFullySelected = isGroupFullySelected(group.columns);
-                        const isPartial = isGroupPartiallySelected(group.columns);
-                        const selectedCount = group.columns.filter((c) => Boolean(safeColumnVisibility[c])).length;
+                {/* گروه‌ها */}
+                <div className="d-flex flex-column gap-3">
+                    {Object.entries(filteredGroups).map(([key, group]) => {
+                        const groupActiveCount = group.columns.filter(c => columnVisibility[c]).length;
+                        const isAllActive = group.columns.length > 0 && groupActiveCount === group.columns.length;
 
                         return (
-                            <div key={groupKey} className="column-group">
-                                {/* هدر گروه */}
-                                <div
-                                    className="group-header"
-                                    onClick={() => handleToggleGroup(group.columns, !isFullySelected)}
-                                >
-                                    <div className="group-info">
-                                        <i className={`${group.icon} group-icon`}></i>
-                                        <span className="group-label">{group.label}</span>
-                                        <Badge
-                                            color={isFullySelected ? "success" : isPartial ? "warning" : "secondary"}
-                                            className="group-badge"
-                                        >
-                                            {selectedCount}/{group.columns.length}
-                                        </Badge>
+                            <div key={key} className="card border shadow-sm mb-0">
+                                <div className="card-header bg-white py-2 px-3 d-flex justify-content-between align-items-center">
+                                    <div className="d-flex align-items-center gap-2">
+                                        <div className="avatar-xs d-flex align-items-center justify-content-center bg-soft-primary rounded text-primary">
+                                            <i className={group.icon}></i>
+                                        </div>
+                                        <span className="fw-bold text-dark font-size-13">{group.label}</span>
                                     </div>
-                                    <Input
-                                        type="checkbox"
-                                        checked={isFullySelected}
-                                        className={`group-checkbox ${isPartial ? "indeterminate" : ""}`}
-                                        onChange={() => handleToggleGroup(group.columns, !isFullySelected)}
-                                        onClick={(e) => e.stopPropagation()}
-                                    />
+                                    <div className="form-check form-switch m-0" title="انتخاب/حذف کل گروه">
+                                        <input
+                                            className="form-check-input cursor-pointer"
+                                            type="checkbox"
+                                            checked={isAllActive}
+                                            onChange={(e) => {
+                                                const newVis = { ...columnVisibility };
+                                                group.columns.forEach(c => newVis[c] = e.target.checked);
+                                                onToggleColumn(newVis);
+                                            }}
+                                        />
+                                    </div>
                                 </div>
+                                <div className="card-body p-3">
+                                    <Row>
+                                        {group.columns.map((col) => {
+                                            const label = columnLabels[col];
+                                            if (!label) return null;
+                                            const isChecked = !!columnVisibility[col];
 
-                                {/* لیست ستون‌ها */}
-                                <Row className="column-list">
-                                    {group.columns.map((colKey) => {
-                                        const label = safeColumnLabels[colKey];
-                                        if (!label) return null;
-
-                                        const isVisible = Boolean(safeColumnVisibility[colKey]);
-
-                                        return (
-                                            <Col xs="6" sm="4" key={colKey}>
-                                                <div
-                                                    className={`column-item ${isVisible ? "active" : ""}`}
-                                                    onClick={() => handleColumnToggle(colKey)}
-                                                >
-                                                    <Input
-                                                        type="checkbox"
-                                                        checked={isVisible}
-                                                        onChange={() => handleColumnToggle(colKey)}
-                                                        onClick={(e) => e.stopPropagation()}
-                                                    />
-                                                    <span className="column-label">{label}</span>
-                                                </div>
-                                            </Col>
-                                        );
-                                    })}
-                                </Row>
+                                            return (
+                                                <Col xs="6" sm="4" md="3" key={col} className="mb-2">
+                                                    <div
+                                                        className={`d-flex align-items-center p-2 rounded border cursor-pointer transition-all ${isChecked ? 'border-primary bg-soft-primary' : 'border-light bg-white'}`}
+                                                        onClick={() => handleToggle(col)}
+                                                    >
+                                                        <input
+                                                            type="checkbox"
+                                                            className="form-check-input m-0 me-2 cursor-pointer"
+                                                            checked={isChecked}
+                                                            onChange={() => handleToggle(col)}
+                                                            onClick={(e) => e.stopPropagation()}
+                                                        />
+                                                        <span className={`font-size-12 ${isChecked ? 'text-primary fw-bold' : 'text-muted'}`}>
+                                                            {label}
+                                                        </span>
+                                                    </div>
+                                                </Col>
+                                            );
+                                        })}
+                                    </Row>
+                                </div>
                             </div>
                         );
                     })}
-
-                    {Object.keys(filteredGroups).length === 0 && (
-                        <div className="no-results">
-                            <i className="ri-search-line"></i>
-                            <p>ستونی با این نام پیدا نشد</p>
-                        </div>
-                    )}
                 </div>
             </ModalBody>
-
             <ModalFooter>
-                <Button color="primary" onClick={toggle}>
-                    <i className="ri-check-line me-1"></i>
-                    تأیید
-                </Button>
+                <Button color="primary" onClick={toggle} className="w-100">تایید و اعمال تغییرات</Button>
             </ModalFooter>
         </Modal>
     );

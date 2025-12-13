@@ -1,5 +1,4 @@
 import React, { useState } from "react";
-
 import * as Yup from "yup";
 import { useFormik } from "formik";
 
@@ -23,7 +22,7 @@ import lightlogo from "../../assets/images/logo-light.svg";
 import { useDispatch } from "react-redux";
 import { loginSuccess } from "../../store/actions";
 
-import { requestOtp, verifyOtp } from "../../helpers/api_helper";
+import { requestOtp, verifyOtp } from "../../services/auth";
 
 const Login = () => {
   document.title = "ورود به سامانه | اتحادیه";
@@ -35,10 +34,11 @@ const Login = () => {
   const [errorMessage, setErrorMessage] = useState("");
   const [loading, setLoading] = useState(false);
 
+  /* --------------------------------------------------
+      مرحله ۱ — دریافت OTP
+  -------------------------------------------------- */
   const formMobile = useFormik({
-    initialValues: {
-      mobile: "",
-    },
+    initialValues: { mobile: "" },
     validationSchema: Yup.object({
       mobile: Yup.string()
           .required("شماره موبایل را وارد کنید")
@@ -49,26 +49,27 @@ const Login = () => {
       setLoading(true);
 
       try {
-        const data = await requestOtp(values.mobile);
+        const res = await requestOtp(values.mobile);
 
-        if (data.success) {
+        if (res.success) {
           setMobile(values.mobile);
           setStep(2);
         } else {
-          setErrorMessage(data?.error || data?.message || "خطا در ارسال کد");
+          setErrorMessage(res.error || res.message || "خطا در ارسال کد");
         }
-      } catch (error) {
-        setErrorMessage(typeof error === "string" ? error : "ارتباط با سرور برقرار نشد");
+      } catch (e) {
+        setErrorMessage("ارتباط با سرور برقرار نشد");
       }
 
       setLoading(false);
     },
   });
 
+  /* --------------------------------------------------
+      مرحله ۲ — تأیید OTP
+  -------------------------------------------------- */
   const formOtp = useFormik({
-    initialValues: {
-      otp: "",
-    },
+    initialValues: { otp: "" },
     validationSchema: Yup.object({
       otp: Yup.string()
           .required("کد را وارد کنید")
@@ -79,64 +80,65 @@ const Login = () => {
       setLoading(true);
 
       try {
-        const data = await verifyOtp(mobile, values.otp);
+        const res = await verifyOtp(mobile, values.otp);
 
-        if (!data.success || !data.token) {
-          setErrorMessage(data?.error || data?.message || "کد صحیح نیست");
+        if (!res.success || !res.token) {
+          setErrorMessage(res.error || "کد صحیح نیست");
           setLoading(false);
           return;
         }
 
-        const memberData = data.user;
+        const user = res.user;
 
-        // ذخیره امن
-        localStorage.setItem("token", data.token);
-        localStorage.setItem("member", JSON.stringify(memberData));
-        localStorage.removeItem("authUser");
+        // ذخیره در localStorage
+        localStorage.setItem("authToken", res.token);
+        localStorage.setItem("user", JSON.stringify(user));
 
-        // درست کردن Redux
+        // ذخیره در Redux
         dispatch(
             loginSuccess({
-              token: data.token,
-              user: memberData,
+              token: res.token,
+              user,
             })
         );
 
-        // جلوگیری از برگشت به لاگین
+        // انتقال به داشبورد
         setTimeout(() => {
           window.location.assign("/dashboard");
-        }, 50);
+        }, 80);
 
-      } catch (error) {
-        setErrorMessage(
-            error?.message ||
-            (typeof error === "string" ? error : "ارتباط با سرور برقرار نشد")
-        );
+      } catch (e) {
+        setErrorMessage("ارتباط با سرور برقرار نشد");
       }
 
       setLoading(false);
     },
   });
 
+  /* --------------------------------------------------
+      ارسال مجدد OTP
+  -------------------------------------------------- */
   const handleResendOtp = async () => {
     setErrorMessage("");
     setLoading(true);
 
     try {
-      const data = await requestOtp(mobile);
-
-      if (data.success) {
+      const res = await requestOtp(mobile);
+      if (res.success) {
         alert("کد جدید ارسال شد");
       } else {
-        setErrorMessage(data?.error || data?.message || "خطا در ارسال مجدد");
+        setErrorMessage(res.message || "خطا در ارسال مجدد");
       }
-    } catch (error) {
-      setErrorMessage(typeof error === "string" ? error : "ارتباط با سرور برقرار نشد");
+    } catch {
+      setErrorMessage("خطا در اتصال");
     }
 
     setLoading(false);
   };
 
+  /* --------------------------------------------------
+      UI
+  -------------------------------------------------- */
   return (
       <div className="account-pages my-5 pt-sm-5">
         <Container>
@@ -169,6 +171,7 @@ const Login = () => {
                   <div className="p-3">
                     {errorMessage && <Alert color="danger">{errorMessage}</Alert>}
 
+                    {/* مرحله ۱ */}
                     {step === 1 && (
                         <Form
                             onSubmit={(e) => {
@@ -191,7 +194,9 @@ const Login = () => {
                                 }
                                 disabled={loading}
                             />
-                            <FormFeedback>{formMobile.errors.mobile}</FormFeedback>
+                            <FormFeedback>
+                              {formMobile.errors.mobile}
+                            </FormFeedback>
                           </div>
 
                           <Button
@@ -205,6 +210,7 @@ const Login = () => {
                         </Form>
                     )}
 
+                    {/* مرحله ۲ */}
                     {step === 2 && (
                         <Form
                             onSubmit={(e) => {

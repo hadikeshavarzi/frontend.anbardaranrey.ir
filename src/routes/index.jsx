@@ -22,7 +22,7 @@ import MemberList from "../pages/Members/MemberList";
 import AddMember from "../pages/Members/AddMember";
 import EditMember from "../pages/Members/EditMember";
 
-/* Customers (NEW) */
+/* Customers */
 import CustomerList from "../pages/Customers/CustomerList";
 import AddCustomer from "../pages/Customers/AddCustomer";
 import EditCustomer from "../pages/Customers/EditCustomer";
@@ -32,54 +32,57 @@ import ReceiptForm from "../pages/Receipt/ReceiptForm";
 import ReceiptsList from "../pages/Receipt/ReceiptsList";
 import ReceiptView from "../pages/Receipt/ReceiptView";
 import EditReceipt from "../pages/Receipt/EditReceipt";
+
+/* Clearance */
+import ClearancesAdd from "../pages/Clearance/ClearancesAdd";  // ✅ اضافه شد
+
 /* Auth */
 import Login from "../pages/Authentication/Login";
 import Register from "../pages/Authentication/Register";
 import Logout from "../pages/Authentication/Logout";
 
-
 // ===============================================
-// 🔒 Protected Routes (Auth Required)
+// 🔒 Protected Routes
 // ===============================================
 const authProtectedRoutes = [
-
   /* Dashboard */
   { path: "/dashboard", component: <Dashboard /> },
 
-  /* ---------- Members ---------- */
+  /* Members */
   { path: "/members/list", component: <MemberList /> },
   { path: "/members/add", component: <AddMember /> },
   { path: "/members/edit/:id", component: <EditMember /> },
 
-  /* ---------- Customers (NEW) ---------- */
-  { path: "/customers", component: <CustomerList /> },
+  /* Customers */
+  { path: "/customers/list", component: <CustomerList /> },
   { path: "/customers/add", component: <AddCustomer /> },
   { path: "/customers/edit/:id", component: <EditCustomer /> },
 
-  /* ---------- Inventory / Units ---------- */
+  /* Inventory */
   { path: "/inventory/unit-list", component: <UnitList /> },
   { path: "/inventory/add-unit", component: <AddUnit /> },
   { path: "/inventory/edit-unit/:id", component: <EditUnit /> },
 
-  /* ---------- Inventory / Categories ---------- */
   { path: "/inventory/category-list", component: <CategoryList /> },
   { path: "/inventory/add-category", component: <AddCategory /> },
   { path: "/inventory/edit-category/:id", component: <EditCategory /> },
 
-  /* ---------- Inventory / Products ---------- */
   { path: "/inventory/product-list", component: <ProductList /> },
   { path: "/inventory/add-product", component: <AddProduct /> },
   { path: "/inventory/edit-product/:id", component: <EditProduct /> },
 
-  /* ---------- Receipt ---------- */
+  /* Receipt */
   { path: "/receipt/form", component: <ReceiptForm /> },
   { path: "/receipt/list", component: <ReceiptsList /> },
-  { path: "/receipts/view/:id", component: <ReceiptView /> },  
+  { path: "/receipts/view/:id", component: <ReceiptView /> },
   { path: "/receipts/edit/:id", component: <EditReceipt /> },
+
+  /* Clearance */
+  { path: "/clearances/add", component: <ClearancesAdd /> },  // ✅ اصلاح شد
+
   /* Default */
   { path: "/", exact: true, component: <Navigate to="/dashboard" /> },
 ];
-
 
 // ===============================================
 // 🔓 Public Routes

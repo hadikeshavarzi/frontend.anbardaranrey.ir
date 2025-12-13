@@ -1,6 +1,6 @@
 import axios from "axios";
+import { API_BASE as API } from "../helpers/api_helper.jsx";
 
-const API = "https://cms.anbardaranrey.ir/api";
 
 // ========================================
 // 🔐 Authentication

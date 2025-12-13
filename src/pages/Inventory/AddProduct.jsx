@@ -21,41 +21,62 @@ import { get, post } from "../../helpers/api_helper.jsx";
 const AddProduct = () => {
     const navigate = useNavigate();
 
-    const [loading, setLoading] = useState(false);
-    const [loadingData, setLoadingData] = useState(true);
+    const [loading, setLoading] = useState(false); // برای ارسال فرم
+    const [loadingData, setLoadingData] = useState(true); // برای لود یونیت و دسته
     const [error, setError] = useState("");
     const [success, setSuccess] = useState("");
     const [units, setUnits] = useState([]);
     const [categories, setCategories] = useState([]);
 
-    // لود واحدها و دسته‌بندی‌ها
+    /* ---------------------------------------------
+       لود واحدها و دسته‌بندی‌ها
+    --------------------------------------------- */
     useEffect(() => {
         async function loadData() {
             setLoadingData(true);
+            setError("");
+
             try {
                 const [unitsRes, catsRes] = await Promise.all([
                     get("/product-units"),
                     get("/product-categories"),
                 ]);
 
-                setUnits(unitsRes?.docs || []);
-                setCategories(catsRes?.docs || []);
+                console.log("🔥 Units:", unitsRes);
+                console.log("🔥 Categories:", catsRes);
+
+                // --- Sort ---
+                const unitsList = (Array.isArray(unitsRes) ? unitsRes : unitsRes?.data || [])
+                    .sort((a, b) => a.name.localeCompare(b.name, "fa"));
+
+                const catList = (catsRes?.data || [])
+                    .sort((a, b) => a.name.localeCompare(b.name, "fa"));
+
+                setUnits(unitsList);
+                setCategories(catList);
             } catch (err) {
-                console.error("Error loading data:", err);
-                setError("خطا در بارگذاری اطلاعات اولیه");
+                console.error("❌ Error loading initial data:", err);
+                setError("خطا در بارگذاری اطلاعات اولیه (واحدها و دسته‌بندی‌ها)");
             }
+
             setLoadingData(false);
         }
+
         loadData();
     }, []);
 
+
+
+
+    /* ---------------------------------------------
+       تنظیم Formik + Yup
+    --------------------------------------------- */
     const formik = useFormik({
         initialValues: {
             name: "",
             sku: "",
-            category: "",
-            unit: "",
-            quantity: 0,
+            category_id: "",
+            unit_id: "",
             min_stock: "",
             max_stock: "",
             location: "",
@@ -67,22 +88,30 @@ const AddProduct = () => {
             description: "",
             specifications: "",
             is_active: true,
+            notes: "",
         },
         validationSchema: Yup.object({
             name: Yup.string()
                 .required("نام کالا الزامی است")
                 .min(2, "نام کالا باید حداقل 2 کاراکتر باشد"),
             sku: Yup.string()
-                .required("کد کالا الزامی است")
+                .required("کد کالا (SKU) الزامی است")
                 .min(2, "کد کالا باید حداقل 2 کاراکتر باشد"),
-            category: Yup.string().required("دسته‌بندی الزامی است"),
-            unit: Yup.string().required("واحد کالا الزامی است"),
-            quantity: Yup.number()
-                .min(0, "موجودی نمی‌تواند منفی باشد")
-                .required("موجودی الزامی است"),
-            price: Yup.number().min(0, "قیمت نمی‌تواند منفی باشد"),
+            category_id: Yup.string().required("دسته‌بندی الزامی است"),
+            unit_id: Yup.string().required("واحد کالا الزامی است"),
+            price: Yup.number()
+                .nullable()
+                .typeError("قیمت باید عدد باشد")
+                .min(0, "قیمت نمی‌تواند منفی باشد"),
+            min_stock: Yup.number()
+                .nullable()
+                .typeError("حداقل موجودی باید عدد باشد")
+                .min(0, "حداقل موجودی نمی‌تواند منفی باشد"),
+            max_stock: Yup.number()
+                .nullable()
+                .typeError("حداکثر موجودی باید عدد باشد")
+                .min(0, "حداکثر موجودی نمی‌تواند منفی باشد"),
         }),
-
         onSubmit: async (values) => {
             setError("");
             setSuccess("");
@@ -91,9 +120,13 @@ const AddProduct = () => {
             console.log("📝 Creating new product with values:", values);
 
             try {
-                // چک تکراری بودن SKU
-                const allProducts = await get("/products");
-                const exists = (allProducts.docs || []).some(
+                // --- چک تکراری بودن SKU ---
+                const allProductsRes = await get("/products");
+                const allProducts = Array.isArray(allProductsRes)
+                    ? allProductsRes
+                    : allProductsRes?.data || [];
+
+                const exists = (allProducts || []).some(
                     (p) =>
                         (p.sku || "").trim().toLowerCase() ===
                         values.sku.trim().toLowerCase()
@@ -105,37 +138,60 @@ const AddProduct = () => {
                     return;
                 }
 
-                const result = await post("/products", {
+                // --- بدنه‌ی ارسالی مطابق اسکیمای Supabase ---
+                const payloadBody = {
                     name: values.name,
                     sku: values.sku,
-                    category: values.category ? Number(values.category) : null,
-                    unit: values.unit ? Number(values.unit) : null,
-                    quantity: Number(values.quantity) || 0,
-                    min_stock: values.min_stock ? Number(values.min_stock) : null,
-                    max_stock: values.max_stock ? Number(values.max_stock) : null,
-                    location: values.location || "",
-                    price: values.price ? Number(values.price) : null,
-                    cost_price: values.cost_price ? Number(values.cost_price) : null,
-                    barcode: values.barcode || "",
-                    batch_number: values.batch_number || "",
-                    expire_date: values.expire_date || null,
-                    description: values.description || "",
-                    specifications: values.specifications || "",
+                    category_id: values.category_id ? Number(values.category_id) : null,
+                    unit_id: values.unit_id ? Number(values.unit_id) : null,
+                    min_stock:
+                        values.min_stock !== "" && values.min_stock !== null
+                            ? Number(values.min_stock)
+                            : 0,
+                    max_stock:
+                        values.max_stock !== "" && values.max_stock !== null
+                            ? Number(values.max_stock)
+                            : null,
+                    location: values.location || null,
+                    price:
+                        values.price !== "" && values.price !== null
+                            ? Number(values.price)
+                            : null,
+                    cost_price:
+                        values.cost_price !== "" && values.cost_price !== null
+                            ? Number(values.cost_price)
+                            : null,
+                    barcode: values.barcode || null,
+                    batch_number: values.batch_number || null,
+                    expire_date: values.expire_date || null, // YYYY-MM-DD از input[type=date]
+                    description: values.description || null,
+                    specifications: values.specifications || null,
                     is_active: values.is_active,
-                });
+                    notes: values.notes || null,
+                    // member_id را اگر لازم است سمت بک‌اند از توکن پر کن؛ اینجا ارسال نمی‌کنیم
+                };
 
-                if (result?.id || result?.doc?.id) {
+                console.log("📦 Product payload:", payloadBody);
+
+                const result = await post("/products", payloadBody);
+
+                // /products POST در بک‌اند فعلی: { data } یا { success, data }
+                const created = result?.data || result;
+
+                if (created?.id) {
                     setSuccess("کالا با موفقیت ثبت شد");
 
+                    // بعد از چند لحظه فرم خالی شود (می‌توانی به لیست هم ریدایرکت کنی)
                     setTimeout(() => {
                         formik.resetForm();
                         setSuccess("");
                     }, 2000);
                 } else {
+                    console.warn("⚠️ Unexpected create response:", result);
                     setError("خطا در ثبت کالا");
                 }
             } catch (err) {
-                console.error("❌ Create error:", err);
+                console.error("❌ Create product error:", err);
                 setError(err.response?.data?.message || "خطا در ثبت کالا");
             }
 
@@ -143,6 +199,9 @@ const AddProduct = () => {
         },
     });
 
+    /* ---------------------------------------------
+       اسکرین لودینگ اولیه (واحد + دسته)
+    --------------------------------------------- */
     if (loadingData) {
         return (
             <div className="page-content">
@@ -153,7 +212,7 @@ const AddProduct = () => {
                                 <CardBody className="text-center py-5">
                                     <Spinner color="primary" />
                                     <div className="mt-3">
-                                        <h5 className="text-muted">در حال بارگذاری...</h5>
+                                        <h5 className="text-muted">در حال بارگذاری اطلاعات...</h5>
                                     </div>
                                 </CardBody>
                             </Card>
@@ -164,6 +223,9 @@ const AddProduct = () => {
         );
     }
 
+    /* ---------------------------------------------
+       UI اصلی فرم
+    --------------------------------------------- */
     return (
         <React.Fragment>
             <div className="page-content">
@@ -189,16 +251,27 @@ const AddProduct = () => {
                         <Col lg={10} className="mx-auto">
                             <Card>
                                 <CardBody>
-                                    <div className="mb-4">
-                                        <h4 className="card-title">اطلاعات کالا</h4>
-                                        <p className="card-title-desc">
-                                            لطفاً اطلاعات کالای جدید را وارد نمایید
-                                        </p>
+                                    {/* Header */}
+                                    <div className="mb-4 d-flex align-items-center">
+                                        <div className="avatar-sm me-3">
+                                            <div className="avatar-title rounded-circle bg-soft-primary text-primary font-size-20">
+                                                <i className="bx bx-package"></i>
+                                            </div>
+                                        </div>
+                                        <div>
+                                            <h4 className="card-title mb-1">اطلاعات کالا</h4>
+                                            <p className="card-title-desc mb-0">
+                                                لطفاً اطلاعات کالای جدید را وارد نمایید
+                                            </p>
+                                        </div>
                                     </div>
 
                                     {/* Alerts */}
                                     {error && (
-                                        <Alert color="danger" className="alert-dismissible fade show">
+                                        <Alert
+                                            color="danger"
+                                            className="alert-dismissible fade show"
+                                        >
                                             <i className="mdi mdi-block-helper me-2"></i>
                                             {error}
                                             <button
@@ -210,7 +283,10 @@ const AddProduct = () => {
                                     )}
 
                                     {success && (
-                                        <Alert color="success" className="alert-dismissible fade show">
+                                        <Alert
+                                            color="success"
+                                            className="alert-dismissible fade show"
+                                        >
                                             <i className="mdi mdi-check-all me-2"></i>
                                             {success}
                                             <button
@@ -245,11 +321,13 @@ const AddProduct = () => {
                                                             id="name"
                                                             name="name"
                                                             type="text"
-                                                            placeholder="مثال: لپ‌تاپ ایسوس"
+                                                            placeholder="مثال: میلگرد ۱۲ ذوب آهن"
                                                             value={formik.values.name}
                                                             onChange={formik.handleChange}
                                                             onBlur={formik.handleBlur}
-                                                            invalid={formik.touched.name && !!formik.errors.name}
+                                                            invalid={
+                                                                formik.touched.name && !!formik.errors.name
+                                                            }
                                                             disabled={loading}
                                                         />
                                                         <FormFeedback>{formik.errors.name}</FormFeedback>
@@ -260,17 +338,20 @@ const AddProduct = () => {
                                                 <Col md={6}>
                                                     <div className="mb-3">
                                                         <Label htmlFor="sku" className="form-label">
-                                                            کد کالا (SKU) <span className="text-danger">*</span>
+                                                            کد کالا (SKU){" "}
+                                                            <span className="text-danger">*</span>
                                                         </Label>
                                                         <Input
                                                             id="sku"
                                                             name="sku"
                                                             type="text"
-                                                            placeholder="مثال: LP-ASUS-001"
+                                                            placeholder="مثال: SKU-123"
                                                             value={formik.values.sku}
                                                             onChange={formik.handleChange}
                                                             onBlur={formik.handleBlur}
-                                                            invalid={formik.touched.sku && !!formik.errors.sku}
+                                                            invalid={
+                                                                formik.touched.sku && !!formik.errors.sku
+                                                            }
                                                             disabled={loading}
                                                         />
                                                         <FormFeedback>{formik.errors.sku}</FormFeedback>
@@ -282,18 +363,20 @@ const AddProduct = () => {
                                                 {/* Category */}
                                                 <Col md={6}>
                                                     <div className="mb-3">
-                                                        <Label htmlFor="category" className="form-label">
-                                                            دسته‌بندی <span className="text-danger">*</span>
+                                                        <Label htmlFor="category_id" className="form-label">
+                                                            دسته‌بندی{" "}
+                                                            <span className="text-danger">*</span>
                                                         </Label>
                                                         <Input
-                                                            id="category"
-                                                            name="category"
+                                                            id="category_id"
+                                                            name="category_id"
                                                             type="select"
-                                                            value={formik.values.category}
+                                                            value={formik.values.category_id}
                                                             onChange={formik.handleChange}
                                                             onBlur={formik.handleBlur}
                                                             invalid={
-                                                                formik.touched.category && !!formik.errors.category
+                                                                formik.touched.category_id &&
+                                                                !!formik.errors.category_id
                                                             }
                                                             disabled={loading}
                                                         >
@@ -304,70 +387,54 @@ const AddProduct = () => {
                                                                 </option>
                                                             ))}
                                                         </Input>
-                                                        <FormFeedback>{formik.errors.category}</FormFeedback>
+                                                        <FormFeedback>
+                                                            {formik.errors.category_id}
+                                                        </FormFeedback>
                                                     </div>
                                                 </Col>
 
                                                 {/* Unit */}
                                                 <Col md={6}>
                                                     <div className="mb-3">
-                                                        <Label htmlFor="unit" className="form-label">
+                                                        <Label htmlFor="unit_id" className="form-label">
                                                             واحد <span className="text-danger">*</span>
                                                         </Label>
                                                         <Input
-                                                            id="unit"
-                                                            name="unit"
+                                                            id="unit_id"
+                                                            name="unit_id"
                                                             type="select"
-                                                            value={formik.values.unit}
+                                                            value={formik.values.unit_id}
                                                             onChange={formik.handleChange}
                                                             onBlur={formik.handleBlur}
-                                                            invalid={formik.touched.unit && !!formik.errors.unit}
+                                                            invalid={
+                                                                formik.touched.unit_id &&
+                                                                !!formik.errors.unit_id
+                                                            }
                                                             disabled={loading}
                                                         >
                                                             <option value="">انتخاب کنید...</option>
                                                             {units.map((u) => (
                                                                 <option key={u.id} value={u.id}>
-                                                                    {u.name} ({u.symbol})
+                                                                    {u.name} {u.symbol ? `(${u.symbol})` : ""}
                                                                 </option>
                                                             ))}
                                                         </Input>
-                                                        <FormFeedback>{formik.errors.unit}</FormFeedback>
+                                                        <FormFeedback>
+                                                            {formik.errors.unit_id}
+                                                        </FormFeedback>
                                                     </div>
                                                 </Col>
                                             </Row>
                                         </div>
 
-                                        {/* موجودی و قیمت */}
+                                        {/* موجودی هدف و قیمت */}
                                         <div className="mb-4">
                                             <h5 className="font-size-14 mb-3">
                                                 <i className="bx bx-dollar-circle me-1"></i>
-                                                موجودی و قیمت
+                                                موجودی هدف و قیمت
                                             </h5>
 
                                             <Row>
-                                                {/* Quantity */}
-                                                <Col md={4}>
-                                                    <div className="mb-3">
-                                                        <Label htmlFor="quantity" className="form-label">
-                                                            موجودی فعلی <span className="text-danger">*</span>
-                                                        </Label>
-                                                        <Input
-                                                            id="quantity"
-                                                            name="quantity"
-                                                            type="number"
-                                                            placeholder="0"
-                                                            value={formik.values.quantity}
-                                                            onChange={formik.handleChange}
-                                                            onBlur={formik.handleBlur}
-                                                            invalid={
-                                                                formik.touched.quantity && !!formik.errors.quantity
-                                                            }
-                                                            disabled={loading}
-                                                        />
-                                                        <FormFeedback>{formik.errors.quantity}</FormFeedback>
-                                                    </div>
-                                                </Col>
-
                                                 {/* Min Stock */}
                                                 <Col md={4}>
                                                     <div className="mb-3">
@@ -378,11 +445,19 @@ const AddProduct = () => {
                                                             id="min_stock"
                                                             name="min_stock"
                                                             type="number"
-                                                            placeholder="10"
+                                                            placeholder="مثلاً 0"
                                                             value={formik.values.min_stock}
                                                             onChange={formik.handleChange}
+                                                            onBlur={formik.handleBlur}
+                                                            invalid={
+                                                                formik.touched.min_stock &&
+                                                                !!formik.errors.min_stock
+                                                            }
                                                             disabled={loading}
                                                         />
+                                                        <FormFeedback>
+                                                            {formik.errors.min_stock}
+                                                        </FormFeedback>
                                                     </div>
                                                 </Col>
 
@@ -396,8 +471,34 @@ const AddProduct = () => {
                                                             id="max_stock"
                                                             name="max_stock"
                                                             type="number"
-                                                            placeholder="100"
+                                                            placeholder="مثلاً 100"
                                                             value={formik.values.max_stock}
+                                                            onChange={formik.handleChange}
+                                                            onBlur={formik.handleBlur}
+                                                            invalid={
+                                                                formik.touched.max_stock &&
+                                                                !!formik.errors.max_stock
+                                                            }
+                                                            disabled={loading}
+                                                        />
+                                                        <FormFeedback>
+                                                            {formik.errors.max_stock}
+                                                        </FormFeedback>
+                                                    </div>
+                                                </Col>
+
+                                                {/* Location */}
+                                                <Col md={4}>
+                                                    <div className="mb-3">
+                                                        <Label htmlFor="location" className="form-label">
+                                                            موقعیت در انبار
+                                                        </Label>
+                                                        <Input
+                                                            id="location"
+                                                            name="location"
+                                                            type="text"
+                                                            placeholder="مثلاً قفسه A، ردیف 3"
+                                                            value={formik.values.location}
                                                             onChange={formik.handleChange}
                                                             disabled={loading}
                                                         />
@@ -416,11 +517,13 @@ const AddProduct = () => {
                                                             id="price"
                                                             name="price"
                                                             type="number"
-                                                            placeholder="1000000"
+                                                            placeholder="مثلاً 45000"
                                                             value={formik.values.price}
                                                             onChange={formik.handleChange}
                                                             onBlur={formik.handleBlur}
-                                                            invalid={formik.touched.price && !!formik.errors.price}
+                                                            invalid={
+                                                                formik.touched.price && !!formik.errors.price
+                                                            }
                                                             disabled={loading}
                                                         />
                                                         <FormFeedback>{formik.errors.price}</FormFeedback>
@@ -430,14 +533,17 @@ const AddProduct = () => {
                                                 {/* Cost Price */}
                                                 <Col md={4}>
                                                     <div className="mb-3">
-                                                        <Label htmlFor="cost_price" className="form-label">
+                                                        <Label
+                                                            htmlFor="cost_price"
+                                                            className="form-label"
+                                                        >
                                                             قیمت خرید (تومان)
                                                         </Label>
                                                         <Input
                                                             id="cost_price"
                                                             name="cost_price"
                                                             type="number"
-                                                            placeholder="900000"
+                                                            placeholder="مثلاً 40000"
                                                             value={formik.values.cost_price}
                                                             onChange={formik.handleChange}
                                                             disabled={loading}
@@ -445,18 +551,20 @@ const AddProduct = () => {
                                                     </div>
                                                 </Col>
 
-                                                {/* Location */}
+                                                {/* Expire Date */}
                                                 <Col md={4}>
                                                     <div className="mb-3">
-                                                        <Label htmlFor="location" className="form-label">
-                                                            موقعیت انبار
+                                                        <Label
+                                                            htmlFor="expire_date"
+                                                            className="form-label"
+                                                        >
+                                                            تاریخ انقضا
                                                         </Label>
                                                         <Input
-                                                            id="location"
-                                                            name="location"
-                                                            type="text"
-                                                            placeholder="قفسه A، ردیف 3"
-                                                            value={formik.values.location}
+                                                            id="expire_date"
+                                                            name="expire_date"
+                                                            type="date"
+                                                            value={formik.values.expire_date}
                                                             onChange={formik.handleChange}
                                                             disabled={loading}
                                                         />
@@ -494,14 +602,17 @@ const AddProduct = () => {
                                                 {/* Batch Number */}
                                                 <Col md={4}>
                                                     <div className="mb-3">
-                                                        <Label htmlFor="batch_number" className="form-label">
-                                                            شماره دسته
+                                                        <Label
+                                                            htmlFor="batch_number"
+                                                            className="form-label"
+                                                        >
+                                                            شماره بچ / سری ساخت
                                                         </Label>
                                                         <Input
                                                             id="batch_number"
                                                             name="batch_number"
                                                             type="text"
-                                                            placeholder="BATCH-2024-001"
+                                                            placeholder="BATCH-2025-001"
                                                             value={formik.values.batch_number}
                                                             onChange={formik.handleChange}
                                                             disabled={loading}
@@ -509,32 +620,33 @@ const AddProduct = () => {
                                                     </div>
                                                 </Col>
 
-                                                {/* Expire Date */}
+                                                {/* Notes */}
                                                 <Col md={4}>
                                                     <div className="mb-3">
-                                                        <Label htmlFor="expire_date" className="form-label">
-                                                            تاریخ انقضا
+                                                        <Label htmlFor="notes" className="form-label">
+                                                            یادداشت‌ها
                                                         </Label>
                                                         <Input
-                                                            id="expire_date"
-                                                            name="expire_date"
-                                                            type="date"
-                                                            value={formik.values.expire_date}
+                                                            id="notes"
+                                                            name="notes"
+                                                            type="text"
+                                                            placeholder="یادداشت داخلی..."
+                                                            value={formik.values.notes}
                                                             onChange={formik.handleChange}
                                                             disabled={loading}
                                                         />
                                                     </div>
                                                 </Col>
                                             </Row>
-                                        </div>
 
-                                        {/* توضیحات */}
-                                        <div className="mb-4">
                                             <Row>
                                                 {/* Description */}
                                                 <Col md={6}>
                                                     <div className="mb-3">
-                                                        <Label htmlFor="description" className="form-label">
+                                                        <Label
+                                                            htmlFor="description"
+                                                            className="form-label"
+                                                        >
                                                             توضیحات
                                                         </Label>
                                                         <Input
@@ -553,7 +665,10 @@ const AddProduct = () => {
                                                 {/* Specifications */}
                                                 <Col md={6}>
                                                     <div className="mb-3">
-                                                        <Label htmlFor="specifications" className="form-label">
+                                                        <Label
+                                                            htmlFor="specifications"
+                                                            className="form-label"
+                                                        >
                                                             مشخصات فنی
                                                         </Label>
                                                         <Input
@@ -571,29 +686,30 @@ const AddProduct = () => {
                                             </Row>
                                         </div>
 
-                                        {/* Active Status */}
+                                        {/* وضعیت فعال */}
                                         <Row>
                                             <Col md={12}>
-                                                <div className="mb-4">
-                                                    <div className="form-check form-switch">
-                                                        <Input
-                                                            id="is_active"
-                                                            name="is_active"
-                                                            type="checkbox"
-                                                            className="form-check-input"
-                                                            checked={formik.values.is_active}
-                                                            onChange={formik.handleChange}
-                                                            disabled={loading}
-                                                        />
-                                                        <Label className="form-check-label" htmlFor="is_active">
-                                                            کالا فعال باشد
-                                                        </Label>
-                                                    </div>
+                                                <div className="mb-4 form-check form-switch">
+                                                    <Input
+                                                        id="is_active"
+                                                        name="is_active"
+                                                        type="checkbox"
+                                                        className="form-check-input"
+                                                        checked={formik.values.is_active}
+                                                        onChange={formik.handleChange}
+                                                        disabled={loading}
+                                                    />
+                                                    <Label
+                                                        className="form-check-label"
+                                                        htmlFor="is_active"
+                                                    >
+                                                        کالا فعال باشد
+                                                    </Label>
                                                 </div>
                                             </Col>
                                         </Row>
 
-                                        {/* Action Buttons */}
+                                        {/* دکمه‌ها */}
                                         <div className="d-flex flex-wrap gap-2">
                                             <Button type="submit" color="primary" disabled={loading}>
                                                 {loading ? (

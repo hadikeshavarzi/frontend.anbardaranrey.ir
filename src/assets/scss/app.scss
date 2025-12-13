@@ -18,6 +18,7 @@ File: Main Css File
 @import "./node_modules/bootstrap/scss/mixins.scss";
 
 
+
 // Structure
 @import "custom/structure/general";
 @import "custom/structure/topbar";
@@ -157,4 +158,95 @@ html[dir='rtl'] .recharts-default-legend .recharts-legend-item {
 html[dir='rtl'] .recharts-default-legend .recharts-legend-item svg {
   margin-right: 0 !important;
   margin-left : 4px;
+}
+
+
+/* ===============================================
+   React Select — Skote Compatible Styling
+   =============================================== */
+
+.react-select-container {
+  width: 100%;
+  direction: rtl;
+}
+
+.react-select__control {
+  background-color: #fff !important;
+  border: 1px solid #ced4da !important;
+  border-radius: 6px !important;
+  min-height: 38px !important;
+  box-shadow: none !important;
+  transition: all 0.2s ease-in-out;
+
+  &:hover {
+    border-color: #bfc6d1 !important;
+  }
+
+  &--is-focused {
+    border-color: #556ee6 !important;
+    box-shadow: 0 0 0 0.15rem rgba(85, 110, 230, 0.25) !important;
+  }
+}
+
+.react-select__value-container {
+  padding: 2px 12px !important;
+}
+
+.react-select__single-value {
+  color: #495057 !important;
+}
+
+.react-select__placeholder {
+  color: #74788d !important;
+}
+
+.react-select__indicator-separator {
+  display: none !important;
+}
+
+.react-select__dropdown-indicator {
+  color: #74788d !important;
+  padding: 6px !important;
+
+  &:hover {
+    color: #495057 !important;
+  }
+}
+
+/* Menu / Dropdown */
+.react-select__menu {
+  background: #fff !important;
+  border: 1px solid #ced4da !important;
+  border-radius: 6px !important;
+  margin-top: 2px !important;
+  box-shadow: 0 0.5rem 1rem rgba(0, 0, 0, 0.15) !important;
+  z-index: 999999 !important;
+}
+
+.react-select__menu-list {
+  padding: 0 !important;
+}
+
+.react-select__option {
+  padding: 6px 12px !important;
+  cursor: pointer;
+
+  &--is-focused {
+    background-color: #f3f4f7 !important;
+    color: #495057 !important;
+  }
+
+  &--is-selected {
+    background-color: #556ee6 !important;
+    color: #fff !important;
+  }
+}
+
+.react-select__no-options-message {
+  padding: 8px 12px !important;
+  color: #74788d !important;
+}
+
+.react-select__menu-portal {
+  z-index: 999999 !important;
 }

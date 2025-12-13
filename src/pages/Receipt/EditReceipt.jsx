@@ -9,7 +9,6 @@ import "../../assets/scss/receipt-costs.scss";
 
 import ReceiptOwnerSection from "../../components/Receipt/ReceiptOwnerSection";
 import ReceiptHeader from "../../components/Receipt/ReceiptHeader";
-import ReceiptDocInfo from "../../components/Receipt/ReceiptDocInfo";
 import ReceiptRefSection from "../../components/Receipt/ReceiptRefSection";
 import ReceiptItemsTable from "../../components/Receipt/ReceiptItemsTable";
 import ReceiptCosts from "../../components/Receipt/ReceiptCosts";

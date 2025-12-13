@@ -1,32 +1,27 @@
+// src/components/Receipt/ReceiptHeader.jsx
 import React from "react";
 import { Card, CardBody, Row, Col, Label, Input } from "reactstrap";
-import DatePickerWithIcon from "./DatePickerWithIcon";
+import DatePickerWithIcon from "../Shared/DatePickerWithIcon";
 import PlateInput from "../PlateInput";
 
-const ReceiptHeader = ({
-    birthDateDriver,
-    setBirthDateDriver,
-    dischargeDate,
-    setDischargeDate,
-    plate,
-    setPlate,
-    driver,
-    setDriver,
-}) => {
-    // ⭐ تابع کمکی برای به‌روزرسانی فیلدهای راننده
-    const updateDriverField = (field, value) => {
-        setDriver((prev) => ({
-            ...prev,
-            [field]: value,
-        }));
+export default function ReceiptHeader({ value, onChange }) {
+    const driver = value.driver || {};
+    const plate = value.plate || {};
+
+    // آپدیت عمومی
+    const update = (field, val) => {
+        onChange({
+            ...value,
+            [field]: val,
+        });
     };
 
-    // ⭐ تابع کمکی برای به‌روزرسانی فیلدهای پلاک
-    const updatePlateField = (field, value) => {
-        setPlate((prev) => ({
-            ...prev,
-            [field]: value,
-        }));
+    // آپدیت راننده
+    const updateDriver = (field, val) => {
+        update("driver", {
+            ...driver,
+            [field]: val,
+        });
     };
 
     return (
@@ -34,102 +29,77 @@ const ReceiptHeader = ({
             <div className="receipt-card-header">
                 <div className="title">
                     <i className="ri-user-line me-2"></i>
-                    اطلاعات راننده و خودرو
+                    راننده و خودرو
                 </div>
-                <div className="subtitle">مشخصات هویتی، تماس و اطلاعات خودرو</div>
             </div>
 
             <CardBody>
-                {/* ردیف اول: مشخصات راننده */}
+
+                {/* ردیف اول */}
                 <Row className="mb-3">
                     <Col md="4">
-                        <Label className="form-label">
-                            <i className="ri-id-card-line me-1"></i>
-                            کد ملی / کد فراگیر راننده
-                        </Label>
+                        <Label>کد ملی راننده</Label>
                         <Input
-                            type="text"
                             value={driver.nationalId || ""}
-                            onChange={(e) =>
-                                updateDriverField("nationalId", e.target.value)
-                            }
-                            placeholder="کد ملی یا کد فراگیر"
                             maxLength={10}
+                            onChange={(e) =>
+                                updateDriver("nationalId", e.target.value)
+                            }
                         />
                     </Col>
 
                     <Col md="4">
-                        <Label className="form-label">
-                            <i className="ri-calendar-line me-1"></i>
-                            تاریخ تولد راننده
-                        </Label>
+                        <Label>تاریخ تولد راننده</Label>
                         <DatePickerWithIcon
-                            value={birthDateDriver}
-                            onChange={setBirthDateDriver}
-                            placeholder="تاریخ تولد"
+                            name="birthDateDriver"
+                            value={value.birthDateDriver}
+                            onChange={(val, name) => update(name, val)}
                         />
                     </Col>
 
                     <Col md="4">
-                        <Label className="form-label">
-                            <i className="ri-user-3-line me-1"></i>
-                            نام و نام خانوادگی راننده
-                        </Label>
+                        <Label>نام راننده</Label>
                         <Input
-                            type="text"
                             value={driver.name || ""}
                             onChange={(e) =>
-                                updateDriverField("name", e.target.value)
+                                updateDriver("name", e.target.value)
                             }
-                            placeholder="نام و نام خانوادگی"
                         />
                     </Col>
                 </Row>
 
-                {/* ردیف دوم: تاریخ تخلیه، تلفن و پلاک */}
+                {/* ردیف دوم */}
                 <Row className="mb-3">
                     <Col md="4">
-                        <Label className="form-label">
-                            <i className="ri-calendar-check-line me-1"></i>
-                            تاریخ تخلیه
-                        </Label>
+                        <Label>تاریخ تخلیه</Label>
                         <DatePickerWithIcon
-                            value={dischargeDate}
-                            onChange={setDischargeDate}
-                            placeholder="تاریخ تخلیه کالا"
+                            name="dischargeDate"
+                            value={value.dischargeDate}
+                            onChange={(val, name) => update(name, val)}
                         />
                     </Col>
 
                     <Col md="4">
-                        <Label className="form-label">
-                            <i className="ri-phone-line me-1"></i>
-                            تلفن راننده
-                        </Label>
+                        <Label>تلفن راننده</Label>
                         <Input
-                            type="tel"
                             value={driver.phone || ""}
-                            onChange={(e) =>
-                                updateDriverField("phone", e.target.value)
-                            }
-                            placeholder="09xxxxxxxxx"
                             maxLength={11}
+                            onChange={(e) =>
+                                updateDriver("phone", e.target.value)
+                            }
                         />
                     </Col>
 
                     <Col md="4">
-                        <Label className="form-label">
-                            <i className="ri-car-line me-1"></i>
-                            پلاک خودرو
-                        </Label>
-                        <PlateInput 
-                            value={plate} 
-                            onChange={setPlate}
+                        <Label>پلاک خودرو</Label>
+                        <PlateInput
+                            value={plate}
+                            onChange={(v) => update("plate", v)}
                         />
                     </Col>
                 </Row>
+
             </CardBody>
         </Card>
     );
-};
-
-export default ReceiptHeader;
+}

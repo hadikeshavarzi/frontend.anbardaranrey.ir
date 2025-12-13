@@ -13,16 +13,20 @@ import {
     Spinner,
     Alert,
 } from "reactstrap";
+
 import { useFormik } from "formik";
 import { useNavigate } from "react-router-dom";
-import { get, post } from "../../helpers/api_helper.jsx";
-import DatePickerWithIcon from "../../components/Receipt/DatePickerWithIcon";
-import moment from "moment-jalaali";
-import { DateObject } from "react-multi-date-picker";
-import persian from "react-date-object/calendars/persian";
-import persian_fa from "react-date-object/locales/persian_fa";
 
-// ✅ Import validation schema
+// API helper
+import { get, post } from "../../helpers/api_helper.jsx";
+
+// تاریخ جلالی
+import moment from "moment-jalaali";
+
+// فرم تاریخ
+import DatePickerWithIcon from "../../components/Shared/DatePickerWithIcon";
+
+// Validation schema
 import { customerValidationSchema } from "../../utils/validationSchemas";
 
 const AddCustomer = () => {
@@ -46,7 +50,6 @@ const AddCustomer = () => {
             description: "",
         },
 
-        // ✅ استفاده از schema مشترک
         validationSchema: customerValidationSchema,
 
         onSubmit: async (values) => {
@@ -55,13 +58,14 @@ const AddCustomer = () => {
             setLoading(true);
 
             try {
-                // چک تکراری بودن مشتری
+                // دریافت لیست تمام مشتری‌ها
                 const all = await get("/customers");
 
-                const exists = (all.docs || []).some((c) => {
+                // چک تکراری بودن نام یا کد ملی
+                const exists = (all?.data || []).some((c) => {
                     return (
                         (c.name || "").trim() === values.name.trim() ||
-                        (c.nationalId || "").trim() === values.nationalId.trim()
+                        (c.national_id || "").trim() === values.nationalId.trim()
                     );
                 });
 
@@ -71,34 +75,26 @@ const AddCustomer = () => {
                     return;
                 }
 
-                const dataToSend = { ...values };
+                // Mapping صحیح به ستون‌های Supabase
+                const dataToSend = {
+                    customer_type: values.customerType,
+                    name: values.name,
+                    national_id: values.nationalId,
+                    mobile: values.mobile,
+                    phone: values.phone || null,
+                    economic_code: values.economicCode || null,
+                    postal_code: values.postalCode || null,
+                    address: values.address || null,
+                    description: values.description || null,
+                    birth_or_register_date: values.birthOrRegisterDate
+                        ? moment(values.birthOrRegisterDate.toDate()).format("YYYY-MM-DD")
+                        : null,
+                };
 
-                // تبدیل رشته‌های خالی به null
-                Object.keys(dataToSend).forEach((key) => {
-                    if (dataToSend[key] === "") {
-                        dataToSend[key] = null;
-                    }
-                });
-
-                // تبدیل تاریخ به میلادی
-                if (dataToSend.birthOrRegisterDate) {
-                    const dateVal = dataToSend.birthOrRegisterDate;
-                    
-                    let gregorianDate = null;
-                    
-                    if (dateVal && typeof dateVal === 'object' && dateVal.toDate) {
-                        const jsDate = dateVal.toDate();
-                        gregorianDate = moment(jsDate).format('YYYY-MM-DD');
-                    }
-                    
-                    dataToSend.birthOrRegisterDate = gregorianDate;
-                } else {
-                    dataToSend.birthOrRegisterDate = null;
-                }
-
+                // ارسال به API بک‌اند
                 const result = await post("/customers", dataToSend);
 
-                if (result?.id || result?.doc?.id) {
+                if (result?.data?.id) {
                     setSuccess("مشتری با موفقیت ثبت شد!");
 
                     setTimeout(() => {
@@ -108,8 +104,14 @@ const AddCustomer = () => {
                 } else {
                     setError("خطا در ثبت مشتری");
                 }
+
             } catch (err) {
-                setError(err.response?.data?.message || "خطا در ثبت مشتری");
+                console.log(err);
+                setError(
+                    err?.error?.message ||
+                    err?.response?.data?.message ||
+                    "خطا در ثبت مشتری"
+                );
             }
 
             setLoading(false);
@@ -142,6 +144,7 @@ const AddCustomer = () => {
                         <Col lg={10} className="mx-auto">
                             <Card>
                                 <CardBody>
+
                                     <div className="d-flex align-items-center mb-4">
                                         <div className="flex-shrink-0 me-3">
                                             <div className="avatar-sm">
@@ -175,7 +178,7 @@ const AddCustomer = () => {
                                         <Row>
                                             <Col md={4}>
                                                 <div className="mb-3">
-                                                    <Label>نوع مشتری <span className="text-danger">*</span></Label>
+                                                    <Label>نوع مشتری</Label>
                                                     <Input
                                                         type="select"
                                                         name="customerType"
@@ -187,26 +190,19 @@ const AddCustomer = () => {
                                                         <option value="real">حقیقی</option>
                                                         <option value="company">حقوقی</option>
                                                     </Input>
-                                                    {formik.touched.customerType && formik.errors.customerType && (
-                                                        <FormFeedback>{formik.errors.customerType}</FormFeedback>
-                                                    )}
+                                                    <FormFeedback>{formik.errors.customerType}</FormFeedback>
                                                 </div>
                                             </Col>
 
                                             <Col md={8}>
                                                 <div className="mb-3">
-                                                    <Label>
-                                                        نام / شرکت <span className="text-danger">*</span>
-                                                    </Label>
+                                                    <Label>نام / شرکت</Label>
                                                     <Input
                                                         name="name"
                                                         value={formik.values.name}
                                                         onChange={formik.handleChange}
                                                         onBlur={formik.handleBlur}
-                                                        invalid={
-                                                            formik.touched.name &&
-                                                            !!formik.errors.name
-                                                        }
+                                                        invalid={formik.touched.name && !!formik.errors.name}
                                                     />
                                                     <FormFeedback>{formik.errors.name}</FormFeedback>
                                                 </div>
@@ -219,34 +215,24 @@ const AddCustomer = () => {
                                                     <Label>تاریخ تولد / ثبت</Label>
                                                     <DatePickerWithIcon
                                                         value={formik.values.birthOrRegisterDate}
-                                                        onChange={(dateObject) =>
-                                                            formik.setFieldValue("birthOrRegisterDate", dateObject)
+                                                        onChange={(date) =>
+                                                            formik.setFieldValue("birthOrRegisterDate", date)
                                                         }
                                                     />
-                                                    <small className="text-muted">فرمت: 1402/01/01</small>
                                                 </div>
                                             </Col>
 
                                             <Col md={4}>
                                                 <div className="mb-3">
-                                                    <Label>
-                                                        {formik.values.customerType === 'real' ? 'کد ملی' : 'شناسه ملی'}
-                                                    </Label>
+                                                    <Label>{formik.values.customerType === "real" ? "کد ملی" : "شناسه ملی"}</Label>
                                                     <Input
                                                         name="nationalId"
                                                         value={formik.values.nationalId}
                                                         onChange={formik.handleChange}
                                                         onBlur={formik.handleBlur}
-                                                        invalid={
-                                                            formik.touched.nationalId &&
-                                                            !!formik.errors.nationalId
-                                                        }
-                                                        maxLength={formik.values.customerType === 'real' ? 10 : 11}
+                                                        invalid={formik.touched.nationalId && !!formik.errors.nationalId}
                                                     />
                                                     <FormFeedback>{formik.errors.nationalId}</FormFeedback>
-                                                    <small className="text-muted">
-                                                        {formik.values.customerType === 'real' ? '10 رقم' : '11 رقم'}
-                                                    </small>
                                                 </div>
                                             </Col>
 
@@ -259,11 +245,10 @@ const AddCustomer = () => {
                                                         onChange={formik.handleChange}
                                                         onBlur={formik.handleBlur}
                                                         invalid={formik.touched.mobile && !!formik.errors.mobile}
-                                                        placeholder="09123456789"
                                                         maxLength={11}
+                                                        placeholder="09123456789"
                                                     />
                                                     <FormFeedback>{formik.errors.mobile}</FormFeedback>
-                                                    <small className="text-muted">11 رقم، شروع با 09</small>
                                                 </div>
                                             </Col>
                                         </Row>
@@ -276,7 +261,6 @@ const AddCustomer = () => {
                                                         name="phone"
                                                         value={formik.values.phone}
                                                         onChange={formik.handleChange}
-                                                        placeholder="02112345678"
                                                     />
                                                 </div>
                                             </Col>
@@ -293,7 +277,6 @@ const AddCustomer = () => {
                                                         maxLength={10}
                                                     />
                                                     <FormFeedback>{formik.errors.postalCode}</FormFeedback>
-                                                    <small className="text-muted">10 رقم</small>
                                                 </div>
                                             </Col>
 
@@ -342,6 +325,7 @@ const AddCustomer = () => {
                                             </Col>
                                         </Row>
 
+                                        {/* Buttons */}
                                         <div className="d-flex gap-2">
 
                                             <Button type="submit" color="primary" disabled={loading}>
@@ -377,14 +361,13 @@ const AddCustomer = () => {
                                                 onClick={() => navigate("/customers/list")}
                                             >
                                                 <i className="bx bx-arrow-back me-1"></i>
-                                                بازگشت به لیست
+                                                بازگشت
                                             </Button>
                                         </div>
-                                    </Form>
 
+                                    </Form>
                                 </CardBody>
                             </Card>
-
                         </Col>
                     </Row>
                 </Container>

@@ -5,8 +5,8 @@ import {
     Col,
     Card,
     CardBody,
-    Table,
     Button,
+    Table,
     Spinner,
     Alert,
     Badge,
@@ -23,33 +23,19 @@ const UnitList = () => {
     const [success, setSuccess] = useState("");
     const [searchTerm, setSearchTerm] = useState("");
 
+    // Load the units from the backend
     const loadUnits = async () => {
         setLoading(true);
         setError("");
-
-        console.log("🔍 Loading units list...");
-        console.log("🔗 API URL:", "/product-units");
-
         try {
             const res = await get("/product-units");
-            console.log("✅ Units loaded successfully:", res);
-
-            // Payload برمی‌گردونه { docs: [...] }
-            const unitsList = res?.docs || [];
+            const unitsList = Array.isArray(res) ? res : (res?.data || []);
             setUnits(unitsList);
             setFilteredUnits(unitsList);
         } catch (err) {
-            console.error("❌ Error loading units:", err);
-            console.error("❌ Error response:", err.response?.data);
-            console.error("❌ Error status:", err.response?.status);
-
-            if (err.response?.status === 401) {
-                setError("خطای احراز هویت. لطفاً دوباره وارد شوید.");
-            } else {
-                setError(err.response?.data?.message || "خطا در دریافت لیست واحدها");
-            }
+            console.error("Error loading units:", err);
+            setError("خطا در دریافت لیست واحدها");
         }
-
         setLoading(false);
     };
 
@@ -57,7 +43,7 @@ const UnitList = () => {
         loadUnits();
     }, []);
 
-    // جستجو
+    // Search functionality
     useEffect(() => {
         if (searchTerm.trim() === "") {
             setFilteredUnits(units);
@@ -71,44 +57,19 @@ const UnitList = () => {
         }
     }, [searchTerm, units]);
 
+    // Handle the deletion of a unit
     const handleDelete = async (id, name) => {
         if (!window.confirm(`آیا از حذف واحد "${name}" مطمئن هستید؟`)) return;
 
-        console.log("🗑️ Deleting unit with ID:", id);
-        console.log("🔗 Delete URL:", `/product-units/${id}`);
-
         try {
             const result = await del(`/product-units/${id}`);
-            console.log("✅ Delete successful:", result);
-
-            // حذف از استیت
             setUnits((prev) => prev.filter((u) => u.id !== id));
             setFilteredUnits((prev) => prev.filter((u) => u.id !== id));
-
             setSuccess(`واحد "${name}" با موفقیت حذف شد`);
-            setError("");
-
-            // پاک کردن پیام موفقیت بعد از 3 ثانیه
             setTimeout(() => setSuccess(""), 3000);
         } catch (err) {
-            console.error("❌ Delete error:", err);
-            console.error("❌ Error response:", err.response?.data);
-            console.error("❌ Error status:", err.response?.status);
-
-            if (err.response?.status === 404) {
-                setError("واحد مورد نظر یافت نشد. ممکن است قبلاً حذف شده باشد.");
-                setUnits((prev) => prev.filter((u) => u.id !== id));
-                setFilteredUnits((prev) => prev.filter((u) => u.id !== id));
-            } else if (err.response?.status === 400) {
-                setError("این واحد در بخش‌های دیگر استفاده شده و قابل حذف نیست.");
-            } else if (err.response?.status === 401) {
-                setError("خطای احراز هویت. لطفاً دوباره وارد شوید.");
-            } else {
-                setError(
-                    err.response?.data?.message ||
-                    "خطا در حذف واحد. ممکن است این واحد در بخش‌های دیگر استفاده شده باشد."
-                );
-            }
+            console.error("Delete error:", err);
+            setError("خطا در حذف واحد");
         }
     };
 
@@ -119,7 +80,6 @@ const UnitList = () => {
                     {/* Breadcrumb */}
                     <div className="page-title-box d-sm-flex align-items-center justify-content-between">
                         <h4 className="mb-sm-0 font-size-18">واحدهای کالا</h4>
-
                         <div className="page-title-right">
                             <ol className="breadcrumb m-0">
                                 <li className="breadcrumb-item">
@@ -149,7 +109,6 @@ const UnitList = () => {
                                                 </p>
                                             </div>
                                         </div>
-
                                         <div className="d-flex flex-wrap gap-2">
                                             <Button
                                                 color="light"
@@ -252,9 +211,7 @@ const UnitList = () => {
                                                 </div>
                                             </div>
                                             <h5 className="text-muted">هیچ واحدی ثبت نشده است</h5>
-                                            <p className="text-muted">
-                                                برای شروع، واحد جدیدی اضافه کنید
-                                            </p>
+                                            <p className="text-muted">برای شروع، واحد جدیدی اضافه کنید</p>
                                             <Link
                                                 to="/inventory/add-unit"
                                                 className="btn btn-success mt-2"
@@ -271,13 +228,8 @@ const UnitList = () => {
                                                 </div>
                                             </div>
                                             <h5 className="text-muted">نتیجه‌ای یافت نشد</h5>
-                                            <p className="text-muted">
-                                                واحدی با این مشخصات پیدا نشد
-                                            </p>
-                                            <Button
-                                                color="light"
-                                                onClick={() => setSearchTerm("")}
-                                            >
+                                            <p className="text-muted">واحدی با این مشخصات پیدا نشد</p>
+                                            <Button color="light" onClick={() => setSearchTerm("")}>
                                                 پاک کردن جستجو
                                             </Button>
                                         </div>
@@ -307,9 +259,7 @@ const UnitList = () => {
                                                             </div>
                                                         </td>
                                                         <td>
-                                                            <h5 className="font-size-14 mb-0">
-                                                                {unit.name}
-                                                            </h5>
+                                                            <h5 className="font-size-14 mb-0">{unit.name}</h5>
                                                         </td>
                                                         <td>
                                                             <Badge

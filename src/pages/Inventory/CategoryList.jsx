@@ -23,22 +23,22 @@ const CategoryList = () => {
     const [success, setSuccess] = useState("");
     const [searchTerm, setSearchTerm] = useState("");
 
+    // -----------------------------
+    // Load categories
+    // -----------------------------
     const loadCategories = async () => {
         setLoading(true);
         setError("");
 
-        console.log("🔍 Loading categories list...");
-
         try {
             const res = await get("/product-categories");
-            console.log("✅ Categories loaded successfully:", res);
 
-            const catList = res?.docs || [];
-            setCategories(catList);
-            setFilteredCategories(catList);
+            const list = res?.data || []; // Supabase returns data
+
+            setCategories(list);
+            setFilteredCategories(list);
         } catch (err) {
-            console.error("❌ Error loading categories:", err);
-            setError(err.response?.data?.message || "خطا در دریافت لیست دسته‌بندی‌ها");
+            setError("خطا در دریافت لیست دسته‌بندی‌ها");
         }
 
         setLoading(false);
@@ -48,52 +48,56 @@ const CategoryList = () => {
         loadCategories();
     }, []);
 
-    // جستجو
+    // -----------------------------
+    // Search Filter
+    // -----------------------------
     useEffect(() => {
-        if (searchTerm.trim() === "") {
+        if (!searchTerm.trim()) {
             setFilteredCategories(categories);
-        } else {
-            const filtered = categories.filter(
-                (cat) =>
-                    cat.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                    cat.slug.toLowerCase().includes(searchTerm.toLowerCase())
-            );
-            setFilteredCategories(filtered);
+            return;
         }
+
+        const s = searchTerm.toLowerCase();
+
+        const filtered = categories.filter(
+            (cat) =>
+                (cat.name || "").toLowerCase().includes(s) ||
+                (cat.slug || "").toLowerCase().includes(s)
+        );
+
+        setFilteredCategories(filtered);
     }, [searchTerm, categories]);
 
+    // -----------------------------
+    // Delete Category
+    // -----------------------------
     const handleDelete = async (id, name) => {
         if (!window.confirm(`آیا از حذف دسته‌بندی "${name}" مطمئن هستید؟`)) return;
 
-        console.log("🗑️ Deleting category with ID:", id);
-
         try {
             await del(`/product-categories/${id}`);
-            console.log("✅ Delete successful");
 
             setCategories((prev) => prev.filter((c) => c.id !== id));
             setFilteredCategories((prev) => prev.filter((c) => c.id !== id));
 
             setSuccess(`دسته‌بندی "${name}" با موفقیت حذف شد`);
-            setError("");
-
             setTimeout(() => setSuccess(""), 3000);
         } catch (err) {
-            console.error("❌ Delete error:", err);
+            const status = err.response?.status;
 
-            if (err.response?.status === 404) {
-                setError("دسته‌بندی مورد نظر یافت نشد.");
-                setCategories((prev) => prev.filter((c) => c.id !== id));
-                setFilteredCategories((prev) => prev.filter((c) => c.id !== id));
-            } else if (err.response?.status === 400) {
-                setError("این دسته‌بندی دارای زیرمجموعه یا کالاهای مرتبط است و قابل حذف نیست.");
+            if (status === 409) {
+                setError("این دسته‌بندی در حال استفاده است و امکان حذف ندارد.");
+            } else if (status === 404) {
+                setError("دسته‌بندی مورد نظر پیدا نشد.");
             } else {
-                setError(err.response?.data?.message || "خطا در حذف دسته‌بندی");
+                setError("خطا در حذف دسته‌بندی");
             }
         }
     };
 
-    // پیدا کردن نام دسته والد
+    // -----------------------------
+    // Parent Name Resolver
+    // -----------------------------
     const getParentName = (parentId) => {
         if (!parentId) return "-";
         const parent = categories.find((c) => c.id === parentId);
@@ -157,7 +161,6 @@ const CategoryList = () => {
                                             color="danger"
                                             className="alert-dismissible fade show"
                                         >
-                                            <i className="mdi mdi-block-helper me-2"></i>
                                             {error}
                                             <button
                                                 type="button"
@@ -172,7 +175,6 @@ const CategoryList = () => {
                                             color="success"
                                             className="alert-dismissible fade show"
                                         >
-                                            <i className="mdi mdi-check-all me-2"></i>
                                             {success}
                                             <button
                                                 type="button"
@@ -182,7 +184,7 @@ const CategoryList = () => {
                                         </Alert>
                                     )}
 
-                                    {/* Search & Stats */}
+                                    {/* Search */}
                                     {!loading && categories.length > 0 && (
                                         <Row className="mb-3">
                                             <Col md={6}>
@@ -199,9 +201,11 @@ const CategoryList = () => {
                                                     </div>
                                                 </div>
                                             </Col>
+
                                             <Col md={6} className="text-end">
                                                 <div className="text-muted">
-                                                    تعداد کل: <strong>{categories.length}</strong> دسته‌بندی
+                                                    تعداد کل:{" "}
+                                                    <strong>{categories.length}</strong> دسته
                                                     {searchTerm && (
                                                         <>
                                                             {" "}
@@ -217,41 +221,22 @@ const CategoryList = () => {
                                     {/* Table */}
                                     {loading ? (
                                         <div className="text-center py-5">
-                                            <Spinner color="primary" />
-                                            <div className="mt-3">
-                                                <h5 className="text-muted">در حال بارگذاری...</h5>
-                                            </div>
+                                            <Spinner />
+                                            <div className="mt-3 text-muted">در حال بارگذاری...</div>
                                         </div>
                                     ) : categories.length === 0 ? (
                                         <div className="text-center py-5">
-                                            <div className="avatar-lg mx-auto mb-4">
-                                                <div className="avatar-title bg-soft-warning text-warning rounded-circle font-size-24">
-                                                    <i className="bx bx-info-circle"></i>
-                                                </div>
-                                            </div>
-                                            <h5 className="text-muted">هیچ دسته‌بندی‌ای ثبت نشده است</h5>
-                                            <p className="text-muted">
-                                                برای شروع، دسته‌بندی جدیدی اضافه کنید
-                                            </p>
+                                            <h5 className="text-muted">هیچ دسته‌ای ثبت نشده است</h5>
                                             <Link
                                                 to="/inventory/add-category"
                                                 className="btn btn-success mt-2"
                                             >
-                                                <i className="bx bx-plus-circle me-1"></i>
-                                                افزودن اولین دسته‌بندی
+                                                افزودن اولین دسته
                                             </Link>
                                         </div>
                                     ) : filteredCategories.length === 0 ? (
                                         <div className="text-center py-5">
-                                            <div className="avatar-lg mx-auto mb-4">
-                                                <div className="avatar-title bg-soft-info text-info rounded-circle font-size-24">
-                                                    <i className="bx bx-search"></i>
-                                                </div>
-                                            </div>
                                             <h5 className="text-muted">نتیجه‌ای یافت نشد</h5>
-                                            <p className="text-muted">
-                                                دسته‌بندی با این مشخصات پیدا نشد
-                                            </p>
                                             <Button color="light" onClick={() => setSearchTerm("")}>
                                                 پاک کردن جستجو
                                             </Button>
@@ -265,48 +250,52 @@ const CategoryList = () => {
                                                     <th>نام دسته‌بندی</th>
                                                     <th>نامک</th>
                                                     <th>دسته والد</th>
-                                                    <th style={{ width: "100px" }}>وضعیت</th>
-                                                    <th style={{ width: "160px" }}>عملیات</th>
+                                                    <th>وضعیت</th>
+                                                    <th style={{ width: "150px" }}>عملیات</th>
                                                 </tr>
                                                 </thead>
+
                                                 <tbody>
                                                 {filteredCategories.map((cat, index) => (
                                                     <tr key={cat.id}>
                                                         <td>
                                                             <div className="avatar-xs">
-                                  <span className="avatar-title rounded-circle bg-soft-primary text-primary">
-                                    {index + 1}
-                                  </span>
+                                                                    <span className="avatar-title rounded-circle bg-soft-primary text-primary">
+                                                                        {index + 1}
+                                                                    </span>
                                                             </div>
                                                         </td>
-                                                        <td>
-                                                            <h5 className="font-size-14 mb-0">
-                                                                {cat.name}
-                                                            </h5>
-                                                        </td>
+
+                                                        <td>{cat.name}</td>
+
                                                         <td>
                                                             <Badge color="info" className="badge-soft-info" pill>
                                                                 {cat.slug}
                                                             </Badge>
                                                         </td>
-                                                        <td>
-                                <span className="text-muted">
-                                  {getParentName(cat.parent)}
-                                </span>
+
+                                                        <td className="text-muted">
+                                                            {getParentName(cat.parent_id)}
                                                         </td>
+
                                                         <td>
                                                             {cat.is_active ? (
-                                                                <Badge color="success" className="badge-soft-success">
-                                                                    <i className="bx bx-check-circle me-1"></i>
+                                                                <Badge
+                                                                    color="success"
+                                                                    className="badge-soft-success"
+                                                                >
                                                                     فعال
                                                                 </Badge>
                                                             ) : (
-                                                                <Badge color="secondary" className="badge-soft-secondary">
-                                                                    <i className="bx bx-x-circle me-1"></i>
+                                                                <Badge
+                                                                    color="secondary"
+                                                                    className="badge-soft-secondary"
+                                                                >
                                                                     غیرفعال
                                                                 </Badge>
                                                             )}
                                                         </td>
+
                                                         <td>
                                                             <div className="d-flex gap-2">
                                                                 <Link
@@ -315,6 +304,7 @@ const CategoryList = () => {
                                                                 >
                                                                     <i className="bx bx-edit-alt"></i>
                                                                 </Link>
+
                                                                 <Button
                                                                     size="sm"
                                                                     color="soft-danger"

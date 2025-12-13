@@ -1,60 +1,53 @@
 // src/components/Receipt/ReceiptCosts.jsx
-import React, { useState, useEffect, useRef } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import { Row, Col, Label, Input, Collapse } from "reactstrap";
 
-/**
- * تبدیل عدد به فرمت هزارگان فارسی
- */
+/* -------------------------
+ * Helpers
+ * ------------------------- */
 const formatNumber = (value) => {
-    if (!value && value !== 0) return "";
-    // حذف همه کاراکترهای غیر عددی
+    if (!value) return "";
     const numStr = String(value).replace(/[^\d]/g, "");
-    if (!numStr) return "";
-    // اضافه کردن جداکننده هزارگان
     return numStr.replace(/\B(?=(\d{3})+(?!\d))/g, ",");
 };
 
-/**
- * حذف فرمت و برگرداندن عدد خام
- */
-const unformatNumber = (value) => {
-    if (!value) return "";
-    return String(value).replace(/[^\d]/g, "");
-};
+const unformatNumber = (value) =>
+    value ? String(value).replace(/[^\d]/g, "") : "";
 
-/**
- * کامپوننت Input با فرمت‌دهی لایو
- */
-const CurrencyInput = ({ value, onChange, placeholder = "0", className = "", onKeyDown, inputRef, ...props }) => {
-    const [displayValue, setDisplayValue] = useState("");
+/* -------------------------
+ * Currency Input
+ * ------------------------- */
+const CurrencyInput = ({ value, onChange, inputRef, onKeyDown }) => {
+    const [display, setDisplay] = useState("");
 
     useEffect(() => {
-        setDisplayValue(formatNumber(value));
+        setDisplay(formatNumber(value));
     }, [value]);
 
-    const handleChange = (e) => {
-        const rawValue = unformatNumber(e.target.value);
-        setDisplayValue(formatNumber(rawValue));
-        onChange(rawValue);
+    const handle = (e) => {
+        const raw = unformatNumber(e.target.value);
+        setDisplay(formatNumber(raw));
+        onChange(raw);
     };
 
     return (
         <Input
             type="text"
-            inputMode="numeric"
-            value={displayValue}
-            onChange={handleChange}
-            placeholder={placeholder}
-            className={className}
             dir="ltr"
+            value={display}
+            onChange={handle}
             onKeyDown={onKeyDown}
             innerRef={inputRef}
-            {...props}
+            inputMode="numeric"
+            placeholder="0"
+            className="cost-input"
         />
     );
 };
 
-// ترتیب فیلدها برای navigation
+/* -------------------------
+ * Field Navigation Order
+ * ------------------------- */
 const FIELD_ORDER = [
     "loadCost",
     "unloadCost",
@@ -62,243 +55,144 @@ const FIELD_ORDER = [
     "tax",
     "returnFreight",
     "loadingFee",
-    "miscCost"
+    "miscCost",
 ];
 
-const ReceiptCosts = ({ finance, setFinance }) => {
-    const [showMiscDesc, setShowMiscDesc] = useState(false);
+export default function ReceiptCosts({ value, onChange }) {
+    const finance = value || {};
     const inputRefs = useRef({});
+    const [miscVisible, setMiscVisible] = useState(false);
 
-    const handleChange = (key, value) => {
-        setFinance((prev) => ({
-            ...prev,
-            [key]: value,
-        }));
-    };
+    /* -------------------------
+     * Update wrapper
+     * ------------------------- */
+    const update = (field, v) => {
+        const num = v === "" ? "" : Number(v) || 0;
 
-    // رفتن به فیلد بعدی با Enter
-    const handleKeyDown = (e, currentField) => {
-        if (e.key === "Enter") {
-            e.preventDefault();
-            const currentIndex = FIELD_ORDER.indexOf(currentField);
-            const nextIndex = currentIndex + 1;
+        onChange({
+            ...finance,
+            [field]: num,
+        });
 
-            if (nextIndex < FIELD_ORDER.length) {
-                const nextField = FIELD_ORDER[nextIndex];
-                inputRefs.current[nextField]?.focus();
-            } else {
-                // اگر آخرین فیلد بود و متفرقه مقدار داشت، برو به توضیحات
-                if (parseFloat(finance.miscCost) > 0) {
-                    inputRefs.current["miscDescription"]?.focus();
-                }
-            }
+        if (field === "miscCost") {
+            setMiscVisible(num > 0);
         }
     };
 
-    // وقتی متفرقه مقدار داشت، توضیحات نمایش داده بشه
+    /* -------------------------
+     * Enter → go next field
+     * ------------------------- */
+    const handleKeyDown = (e, field) => {
+        if (e.key !== "Enter") return;
+
+        e.preventDefault();
+        const idx = FIELD_ORDER.indexOf(field);
+        const next = FIELD_ORDER[idx + 1];
+
+        if (next) {
+            inputRefs.current[next]?.focus();
+        } else if (finance.miscCost > 0) {
+            inputRefs.current["miscDescription"]?.focus();
+        }
+    };
+
+    /* -------------------------
+     * Auto-show misc description
+     * ------------------------- */
     useEffect(() => {
-        const miscValue = parseFloat(finance.miscCost) || 0;
-        if (miscValue > 0) {
-            setShowMiscDesc(true);
-        }
+        setMiscVisible(Number(finance.miscCost) > 0);
     }, [finance.miscCost]);
 
-    // محاسبه جمع هزینه‌ها
-    const totalCost =
-        (parseFloat(finance.loadCost) || 0) +
-        (parseFloat(finance.unloadCost) || 0) +
-        (parseFloat(finance.warehouseCost) || 0) +
-        (parseFloat(finance.tax) || 0) +
-        (parseFloat(finance.returnFreight) || 0) +
-        (parseFloat(finance.loadingFee) || 0) +
-        (parseFloat(finance.miscCost) || 0);
+    /* -------------------------
+     * Total
+     * ------------------------- */
+    const total =
+        (Number(finance.loadCost) || 0) +
+        (Number(finance.unloadCost) || 0) +
+        (Number(finance.warehouseCost) || 0) +
+        (Number(finance.tax) || 0) +
+        (Number(finance.returnFreight) || 0) +
+        (Number(finance.loadingFee) || 0) +
+        (Number(finance.miscCost) || 0);
 
+    /* -------------------------
+     * Render
+     * ------------------------- */
     return (
         <div className="receipt-costs-card">
-            {/* هدر کارت */}
+            {/* Header */}
             <div className="costs-header">
                 <div className="costs-title">
                     <i className="ri-calculator-line"></i>
                     <span>هزینه‌ها</span>
                 </div>
+
                 <div className="costs-total">
                     <span className="total-label">جمع کل:</span>
-                    <span className="total-value">{formatNumber(totalCost)}</span>
+                    <span className="total-value">{formatNumber(total)}</span>
                     <span className="total-unit">ریال</span>
                 </div>
             </div>
 
-            {/* فیلدهای هزینه */}
+            {/* Grid */}
             <Row className="costs-grid">
-                <Col lg="3" md="4" sm="6">
-                    <div className="cost-item">
-                        <div className="cost-icon loading">
-                            <i className="ri-truck-line"></i>
-                        </div>
-                        <div className="cost-content">
-                            <Label className="cost-label">بارگیری</Label>
-                            <div className="cost-input-wrapper">
-                                <CurrencyInput
-                                    value={finance.loadCost}
-                                    onChange={(val) => handleChange("loadCost", val)}
-                                    className="cost-input"
-                                    onKeyDown={(e) => handleKeyDown(e, "loadCost")}
-                                    inputRef={(el) => inputRefs.current["loadCost"] = el}
-                                />
-                                <span className="cost-unit">ریال</span>
+                {[
+                    { key: "loadCost", label: "بارگیری", icon: "ri-truck-line", className: "loading" },
+                    { key: "unloadCost", label: "تخلیه", icon: "ri-download-2-line", className: "unloading" },
+                    { key: "warehouseCost", label: "انبارداری", icon: "ri-home-gear-line", className: "warehouse" },
+                    { key: "tax", label: "مالیات", icon: "ri-percent-line", className: "tax" },
+                    { key: "returnFreight", label: "پس‌کرایه", icon: "ri-arrow-go-back-line", className: "return-freight" },
+                    { key: "loadingFee", label: "بارچینی", icon: "ri-stack-line", className: "loading-fee" },
+                    { key: "miscCost", label: "متفرقه", icon: "ri-more-2-line", className: "misc" },
+                ].map(({ key, label, icon, className }) => (
+                    <Col lg="3" md="4" sm="6" key={key}>
+                        <div className="cost-item">
+                            <div className={`cost-icon ${className}`}>
+                                <i className={icon}></i>
                             </div>
-                        </div>
-                    </div>
-                </Col>
 
-                <Col lg="3" md="4" sm="6">
-                    <div className="cost-item">
-                        <div className="cost-icon unloading">
-                            <i className="ri-download-2-line"></i>
-                        </div>
-                        <div className="cost-content">
-                            <Label className="cost-label">تخلیه</Label>
-                            <div className="cost-input-wrapper">
-                                <CurrencyInput
-                                    value={finance.unloadCost}
-                                    onChange={(val) => handleChange("unloadCost", val)}
-                                    className="cost-input"
-                                    onKeyDown={(e) => handleKeyDown(e, "unloadCost")}
-                                    inputRef={(el) => inputRefs.current["unloadCost"] = el}
-                                />
-                                <span className="cost-unit">ریال</span>
-                            </div>
-                        </div>
-                    </div>
-                </Col>
+                            <div className="cost-content">
+                                <Label className="cost-label">{label}</Label>
 
-                <Col lg="3" md="4" sm="6">
-                    <div className="cost-item">
-                        <div className="cost-icon warehouse">
-                            <i className="ri-home-gear-line"></i>
-                        </div>
-                        <div className="cost-content">
-                            <Label className="cost-label">انبارداری</Label>
-                            <div className="cost-input-wrapper">
-                                <CurrencyInput
-                                    value={finance.warehouseCost}
-                                    onChange={(val) => handleChange("warehouseCost", val)}
-                                    className="cost-input"
-                                    onKeyDown={(e) => handleKeyDown(e, "warehouseCost")}
-                                    inputRef={(el) => inputRefs.current["warehouseCost"] = el}
-                                />
-                                <span className="cost-unit">ریال</span>
-                            </div>
-                        </div>
-                    </div>
-                </Col>
+                                <div className="cost-input-wrapper">
+                                    <CurrencyInput
+                                        value={finance[key]}
+                                        onChange={(v) => update(key, v)}
+                                        onKeyDown={(e) => handleKeyDown(e, key)}
+                                        inputRef={(el) => (inputRefs.current[key] = el)}
+                                    />
 
-                <Col lg="3" md="4" sm="6">
-                    <div className="cost-item">
-                        <div className="cost-icon tax">
-                            <i className="ri-percent-line"></i>
-                        </div>
-                        <div className="cost-content">
-                            <Label className="cost-label">مالیات</Label>
-                            <div className="cost-input-wrapper">
-                                <CurrencyInput
-                                    value={finance.tax}
-                                    onChange={(val) => handleChange("tax", val)}
-                                    className="cost-input"
-                                    onKeyDown={(e) => handleKeyDown(e, "tax")}
-                                    inputRef={(el) => inputRefs.current["tax"] = el}
-                                />
-                                <span className="cost-unit">ریال</span>
+                                    <span className="cost-unit">ریال</span>
+                                </div>
                             </div>
                         </div>
-                    </div>
-                </Col>
-
-                <Col lg="3" md="4" sm="6">
-                    <div className="cost-item">
-                        <div className="cost-icon return-freight">
-                            <i className="ri-arrow-go-back-line"></i>
-                        </div>
-                        <div className="cost-content">
-                            <Label className="cost-label">پس‌کرایه</Label>
-                            <div className="cost-input-wrapper">
-                                <CurrencyInput
-                                    value={finance.returnFreight}
-                                    onChange={(val) => handleChange("returnFreight", val)}
-                                    className="cost-input"
-                                    onKeyDown={(e) => handleKeyDown(e, "returnFreight")}
-                                    inputRef={(el) => inputRefs.current["returnFreight"] = el}
-                                />
-                                <span className="cost-unit">ریال</span>
-                            </div>
-                        </div>
-                    </div>
-                </Col>
-
-                <Col lg="3" md="4" sm="6">
-                    <div className="cost-item">
-                        <div className="cost-icon loading-fee">
-                            <i className="ri-stack-line"></i>
-                        </div>
-                        <div className="cost-content">
-                            <Label className="cost-label">بارچینی</Label>
-                            <div className="cost-input-wrapper">
-                                <CurrencyInput
-                                    value={finance.loadingFee}
-                                    onChange={(val) => handleChange("loadingFee", val)}
-                                    className="cost-input"
-                                    onKeyDown={(e) => handleKeyDown(e, "loadingFee")}
-                                    inputRef={(el) => inputRefs.current["loadingFee"] = el}
-                                />
-                                <span className="cost-unit">ریال</span>
-                            </div>
-                        </div>
-                    </div>
-                </Col>
-
-                <Col lg="3" md="4" sm="6">
-                    <div className="cost-item">
-                        <div className="cost-icon misc">
-                            <i className="ri-more-2-line"></i>
-                        </div>
-                        <div className="cost-content">
-                            <Label className="cost-label">متفرقه</Label>
-                            <div className="cost-input-wrapper">
-                                <CurrencyInput
-                                    value={finance.miscCost}
-                                    onChange={(val) => {
-                                        handleChange("miscCost", val);
-                                        const numVal = parseFloat(val) || 0;
-                                        setShowMiscDesc(numVal > 0);
-                                    }}
-                                    className="cost-input"
-                                    onKeyDown={(e) => handleKeyDown(e, "miscCost")}
-                                    inputRef={(el) => inputRefs.current["miscCost"] = el}
-                                />
-                                <span className="cost-unit">ریال</span>
-                            </div>
-                        </div>
-                    </div>
-                </Col>
+                    </Col>
+                ))}
             </Row>
 
-            {/* توضیحات متفرقه */}
-            <Collapse isOpen={showMiscDesc}>
+            {/* misc description */}
+            <Collapse isOpen={miscVisible}>
                 <div className="misc-description-wrapper">
                     <div className="misc-description-item">
                         <div className="misc-desc-icon">
                             <i className="ri-file-text-line"></i>
                         </div>
+
                         <div className="misc-desc-content">
                             <Label className="misc-desc-label">توضیحات هزینه متفرقه</Label>
+
                             <Input
                                 type="textarea"
                                 rows={2}
+                                placeholder="توضیحات مربوط به هزینه متفرقه..."
                                 value={finance.miscDescription || ""}
-                                onChange={(e) => handleChange("miscDescription", e.target.value)}
-                                placeholder="توضیحات مربوط به هزینه متفرقه را وارد کنید..."
-                                className="misc-desc-input"
-                                innerRef={(el) => inputRefs.current["miscDescription"] = el}
+                                onChange={(e) =>
+                                    onChange({
+                                        ...finance,
+                                        miscDescription: e.target.value,
+                                    })
+                                }
+                                innerRef={(el) => (inputRefs.current["miscDescription"] = el)}
                             />
                         </div>
                     </div>
@@ -306,6 +200,4 @@ const ReceiptCosts = ({ finance, setFinance }) => {
             </Collapse>
         </div>
     );
-};
-
-export default ReceiptCosts;
+}

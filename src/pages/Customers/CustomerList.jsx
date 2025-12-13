@@ -23,20 +23,21 @@ const CustomerList = () => {
     const [success, setSuccess] = useState("");
     const [searchTerm, setSearchTerm] = useState("");
 
-    // -------------------------------
+    // --------------------------
     // Load Customers
-    // -------------------------------
+    // --------------------------
     const loadCustomers = async () => {
         setLoading(true);
         setError("");
 
         try {
-            const res = await get("/customers");
-            const list = res?.docs || [];
+            const res = await get("/customers"); // {success, data:[...]}
+            const list = res?.data || [];
 
             setCustomers(list);
             setFilteredCustomers(list);
         } catch (err) {
+            console.error("❌ Load error:", err);
             setError("خطا در دریافت لیست مشتریان");
         }
 
@@ -47,9 +48,9 @@ const CustomerList = () => {
         loadCustomers();
     }, []);
 
-    // -------------------------------
-    // Search
-    // -------------------------------
+    // --------------------------
+    // Search Filter
+    // --------------------------
     useEffect(() => {
         if (!searchTerm.trim()) {
             setFilteredCustomers(customers);
@@ -61,31 +62,37 @@ const CustomerList = () => {
         const filtered = customers.filter((c) =>
             (c.name || "").toLowerCase().includes(s) ||
             (c.mobile || "").toLowerCase().includes(s) ||
-            (c.nationalId || "").toLowerCase().includes(s)
+            (c.national_id || "").toLowerCase().includes(s)
         );
 
         setFilteredCustomers(filtered);
     }, [searchTerm, customers]);
 
-    // -------------------------------
-    // Delete Customer
-    // -------------------------------
+    // --------------------------
+    // DELETE Customer
+    // --------------------------
     const handleDelete = async (id, name) => {
         if (!window.confirm(`حذف "${name}"؟`)) return;
 
         try {
             await del(`/customers/${id}`);
 
-            setCustomers((prev) => prev.filter((c) => c.id !== id));
-            setFilteredCustomers((prev) => prev.filter((c) => c.id !== id));
+            setCustomers(prev => prev.filter(c => c.id !== id));
+            setFilteredCustomers(prev => prev.filter(c => c.id !== id));
 
-            setSuccess(`مشتری "${name}" حذف شد`);
+            setSuccess(`مشتری "${name}" با موفقیت حذف شد`);
             setTimeout(() => setSuccess(""), 3000);
+
         } catch (err) {
-            setError("خطا در حذف مشتری");
+            const msg = err.response?.data?.message || "خطا در حذف مشتری";
+
+            setError(msg);
+            setTimeout(() => setError(""), 4000);
         }
     };
 
+
+    // --------------------------
     return (
         <React.Fragment>
             <div className="page-content">
@@ -121,7 +128,7 @@ const CustomerList = () => {
                                             <div>
                                                 <h5 className="card-title mb-1">مدیریت مشتریان</h5>
                                                 <p className="text-muted mb-0">
-                                                    مشاهده، ویرایش و حذف مشتریان ثبت شده
+                                                    مشاهده، ویرایش و حذف مشتریان
                                                 </p>
                                             </div>
                                         </div>
@@ -185,7 +192,7 @@ const CustomerList = () => {
                                                     تعداد کل: <strong>{customers.length}</strong>
                                                     {searchTerm && (
                                                         <>
-                                                            {" "} | نتایج جستجو:{" "}
+                                                            {" "} | نتایج:{" "}
                                                             <strong>{filteredCustomers.length}</strong>
                                                         </>
                                                     )}
@@ -202,23 +209,10 @@ const CustomerList = () => {
                                                 <h5 className="text-muted">در حال بارگذاری...</h5>
                                             </div>
                                         </div>
-                                    ) : customers.length === 0 ? (
-                                        <div className="text-center py-5">
-                                            <h5 className="text-muted">هنوز مشتری ثبت نشده</h5>
-                                            <Link
-                                                to="/customers/add"
-                                                className="btn btn-success mt-2"
-                                            >
-                                                افزودن اولین مشتری
-                                            </Link>
-                                        </div>
                                     ) : filteredCustomers.length === 0 ? (
                                         <div className="text-center py-5">
                                             <h5 className="text-muted">نتیجه‌ای یافت نشد</h5>
-                                            <Button
-                                                color="light"
-                                                onClick={() => setSearchTerm("")}
-                                            >
+                                            <Button color="light" onClick={() => setSearchTerm("")}>
                                                 پاک کردن جستجو
                                             </Button>
                                         </div>
@@ -232,7 +226,7 @@ const CustomerList = () => {
                                                     <th>نوع</th>
                                                     <th>موبایل</th>
                                                     <th>کد ملی / شناسه</th>
-                                                    <th style={{ width: 120 }} className="text-center">
+                                                    <th className="text-center" style={{ width: 120 }}>
                                                         عملیات
                                                     </th>
                                                 </tr>
@@ -241,52 +235,48 @@ const CustomerList = () => {
                                                 <tbody>
                                                 {filteredCustomers.map((c, index) => (
                                                     <tr key={c.id}>
+
+                                                        {/* index */}
                                                         <td>
                                                             <div className="avatar-xs">
-                                                                    <span className="avatar-title rounded-circle bg-soft-primary text-primary">
-                                                                        {index + 1}
-                                                                    </span>
+                                                                <span className="avatar-title rounded-circle bg-soft-primary text-primary">
+                                                                    {index + 1}
+                                                                </span>
                                                             </div>
                                                         </td>
 
-                                                        {/* Name */}
+                                                        {/* name */}
                                                         <td>
                                                             <strong>{c.name}</strong>
                                                             <div className="text-muted small">
-                                                                {c.address
-                                                                    ? (c.address.length > 40
+                                                                {c.address ? (
+                                                                    c.address.length > 40
                                                                         ? c.address.slice(0, 40) + "..."
-                                                                        : c.address)
-                                                                    : "-"}
+                                                                        : c.address
+                                                                ) : "-"}
                                                             </div>
                                                         </td>
 
-                                                        {/* Type */}
+                                                        {/* type */}
                                                         <td>
-                                                            {c.type === "person" ? (
-                                                                <Badge
-                                                                    color="info"
-                                                                    className="badge-soft-info"
-                                                                >
+                                                            {c.customer_type === "real" || c.customer_type === "person" ? (
+                                                                <Badge color="info" className="badge-soft-info">
                                                                     حقیقی
                                                                 </Badge>
                                                             ) : (
-                                                                <Badge
-                                                                    color="warning"
-                                                                    className="badge-soft-warning"
-                                                                >
+                                                                <Badge color="warning" className="badge-soft-warning">
                                                                     حقوقی
                                                                 </Badge>
                                                             )}
                                                         </td>
 
-                                                        {/* Mobile */}
+                                                        {/* mobile */}
                                                         <td>{c.mobile || "-"}</td>
 
-                                                        {/* National ID */}
-                                                        <td>{c.nationalId || "-"}</td>
+                                                        {/* national id */}
+                                                        <td>{c.national_id || "-"}</td>
 
-                                                        {/* Actions */}
+                                                        {/* actions */}
                                                         <td className="text-center">
                                                             <div className="d-flex gap-2 justify-content-center">
                                                                 <Link
@@ -299,9 +289,7 @@ const CustomerList = () => {
                                                                 <Button
                                                                     size="sm"
                                                                     color="soft-danger"
-                                                                    onClick={() =>
-                                                                        handleDelete(c.id, c.name)
-                                                                    }
+                                                                    onClick={() => handleDelete(c.id, c.name)}
                                                                 >
                                                                     <i className="bx bx-trash"></i>
                                                                 </Button>
@@ -310,7 +298,6 @@ const CustomerList = () => {
                                                     </tr>
                                                 ))}
                                                 </tbody>
-
                                             </Table>
                                         </div>
                                     )}

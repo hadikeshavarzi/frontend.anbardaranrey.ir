@@ -23,22 +23,39 @@ const ProductList = () => {
     const [success, setSuccess] = useState("");
     const [searchTerm, setSearchTerm] = useState("");
 
+    /* -------------------------------------------------
+       Load Products
+    ------------------------------------------------- */
     const loadProducts = async () => {
         setLoading(true);
         setError("");
 
-        console.log("🔍 Loading products list...");
-
         try {
             const res = await get("/products");
-            console.log("✅ Products loaded successfully:", res);
 
-            const productList = res?.docs || [];
+
+            // نتیجه می‌تواند آرایه یا {data: [...]} باشد
+            let rawList = Array.isArray(res)
+                ? res
+                : Array.isArray(res?.data)
+                    ? res.data
+                    : [];
+
+            // فقط رکوردهایی که واقعاً کالا هستند (SKU دارند) را نگه می‌داریم
+            let productList = rawList.filter((p) => !!(p.sku && String(p.sku).trim()));
+
+            // مرتب‌سازی الفبایی بر اساس نام
+            productList.sort((a, b) => {
+                const an = (a.name || "").toString();
+                const bn = (b.name || "").toString();
+                return an.localeCompare(bn, "fa");
+            });
+
             setProducts(productList);
             setFilteredProducts(productList);
         } catch (err) {
-            console.error("❌ Error loading products:", err);
-            setError(err.response?.data?.message || "خطا در دریافت لیست کالاها");
+
+            setError("خطا در دریافت لیست کالاها");
         }
 
         setLoading(false);
@@ -48,86 +65,106 @@ const ProductList = () => {
         loadProducts();
     }, []);
 
-    // جستجو
+    /* -------------------------------------------------
+       Search Filter
+    ------------------------------------------------- */
     useEffect(() => {
-        if (searchTerm.trim() === "") {
+        if (!searchTerm.trim()) {
             setFilteredProducts(products);
-        } else {
-            const filtered = products.filter(
-                (p) =>
-                    p.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                    p.sku.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                    (p.barcode && p.barcode.toLowerCase().includes(searchTerm.toLowerCase()))
-            );
-            setFilteredProducts(filtered);
+            return;
         }
+
+        const lower = searchTerm.toLowerCase();
+
+        const filtered = products.filter((p) => {
+            const categoryName =
+                p.category?.name ||
+                p.product_categories?.name ||
+                "";
+            const unitName =
+                p.unit?.name ||
+                p.product_units?.name ||
+                "";
+
+            return (
+                p.name?.toLowerCase().includes(lower) ||
+                p.sku?.toLowerCase().includes(lower) ||
+                p.barcode?.toLowerCase().includes(lower) ||
+                categoryName.toLowerCase().includes(lower) ||
+                unitName.toLowerCase().includes(lower)
+            );
+        });
+
+        setFilteredProducts(filtered);
     }, [searchTerm, products]);
 
+    /* -------------------------------------------------
+       Delete Product
+    ------------------------------------------------- */
     const handleDelete = async (id, name) => {
-        if (!window.confirm(`آیا از حذف کالای "${name}" مطمئن هستید؟`)) return;
-
-        console.log("🗑️ Deleting product with ID:", id);
+        if (!window.confirm(`آیا از حذف "${name}" مطمئن هستید؟`)) return;
 
         try {
             await del(`/products/${id}`);
-            console.log("✅ Delete successful");
 
             setProducts((prev) => prev.filter((p) => p.id !== id));
             setFilteredProducts((prev) => prev.filter((p) => p.id !== id));
 
-            setSuccess(`کالای "${name}" با موفقیت حذف شد`);
-            setError("");
-
-            setTimeout(() => setSuccess(""), 3000);
+            setSuccess(`کالا "${name}" حذف شد.`);
+            setTimeout(() => setSuccess(""), 2500);
         } catch (err) {
-            console.error("❌ Delete error:", err);
+         
 
-            if (err.response?.status === 404) {
-                setError("کالای مورد نظر یافت نشد.");
-                setProducts((prev) => prev.filter((p) => p.id !== id));
-                setFilteredProducts((prev) => prev.filter((p) => p.id !== id));
-            } else if (err.response?.status === 400) {
-                setError("این کالا دارای تراکنش‌های مرتبط است و قابل حذف نیست.");
+            if (err.response?.status === 409) {
+                setError("این کالا دارای تراکنش مرتبط است و قابل حذف نیست.");
             } else {
-                setError(err.response?.data?.message || "خطا در حذف کالا");
+                setError("خطا در حذف کالا");
             }
         }
     };
 
-    // فرمت قیمت
-    const formatPrice = (price) => {
-        if (!price) return "-";
-        return new Intl.NumberFormat("fa-IR").format(price) + " تومان";
-    };
+    /* -------------------------------------------------
+       Helpers
+    ------------------------------------------------- */
+    const formatPrice = (price) =>
+        price ? new Intl.NumberFormat("fa-IR").format(price) + " تومان" : "-";
 
-    // رنگ موجودی
-    const getStockBadge = (product) => {
-        const qty = product.quantity || 0;
+    const renderStockBadge = (product) => {
         const min = product.min_stock || 0;
 
-        if (qty === 0) {
-            return <Badge color="danger" className="badge-soft-danger">ناموجود</Badge>;
-        } else if (qty <= min) {
-            return <Badge color="warning" className="badge-soft-warning">کمبود موجودی</Badge>;
-        } else {
-            return <Badge color="success" className="badge-soft-success">موجود</Badge>;
-        }
+        return (
+            <Badge color="warning" className="badge-soft-warning">
+                حداقل موجودی: {min}
+            </Badge>
+        );
     };
 
+    const getCategoryName = (product) =>
+        product.category?.name ||
+        product.product_categories?.name ||
+        "-";
+
+    const getUnitName = (product) =>
+        product.unit?.name ||
+        product.product_units?.name ||
+        "-";
+
+    /* -------------------------------------------------
+       UI
+    ------------------------------------------------- */
     return (
         <React.Fragment>
             <div className="page-content">
                 <Container fluid>
-                    {/* Breadcrumb */}
+                    {/* عنوان صفحه */}
                     <div className="page-title-box d-sm-flex align-items-center justify-content-between">
                         <h4 className="mb-sm-0 font-size-18">کالاها</h4>
-
                         <div className="page-title-right">
                             <ol className="breadcrumb m-0">
                                 <li className="breadcrumb-item">
                                     <Link to="/dashboard">داشبورد</Link>
                                 </li>
-                                <li className="breadcrumb-item active">کالاها</li>
+                                <li className="breadcrumb-item active">لیست کالاها</li>
                             </ol>
                         </div>
                     </div>
@@ -141,7 +178,7 @@ const ProductList = () => {
                                         <div>
                                             <h4 className="card-title mb-1">لیست کالاها</h4>
                                             <p className="card-title-desc mb-0">
-                                                مدیریت کالاها و موجودی انبار
+                                                مدیریت کالاها و دسته‌بندی آنها
                                             </p>
                                         </div>
 
@@ -171,7 +208,6 @@ const ProductList = () => {
                                             color="danger"
                                             className="alert-dismissible fade show"
                                         >
-                                            <i className="mdi mdi-block-helper me-2"></i>
                                             {error}
                                             <button
                                                 type="button"
@@ -186,7 +222,6 @@ const ProductList = () => {
                                             color="success"
                                             className="alert-dismissible fade show"
                                         >
-                                            <i className="mdi mdi-check-all me-2"></i>
                                             {success}
                                             <button
                                                 type="button"
@@ -196,7 +231,7 @@ const ProductList = () => {
                                         </Alert>
                                     )}
 
-                                    {/* Search & Stats */}
+                                    {/* Search */}
                                     {!loading && products.length > 0 && (
                                         <Row className="mb-3">
                                             <Col md={6}>
@@ -205,22 +240,27 @@ const ProductList = () => {
                                                         <Input
                                                             type="text"
                                                             className="form-control"
-                                                            placeholder="جستجو بر اساس نام، کد یا بارکد..."
+                                                            placeholder="جستجو بر اساس نام، کد، بارکد، دسته یا واحد..."
                                                             value={searchTerm}
-                                                            onChange={(e) => setSearchTerm(e.target.value)}
+                                                            onChange={(e) =>
+                                                                setSearchTerm(e.target.value)
+                                                            }
                                                         />
                                                         <i className="bx bx-search-alt search-icon"></i>
                                                     </div>
                                                 </div>
                                             </Col>
+
                                             <Col md={6} className="text-end">
                                                 <div className="text-muted">
                                                     تعداد کل: <strong>{products.length}</strong> کالا
                                                     {searchTerm && (
                                                         <>
                                                             {" "}
-                                                            | نتایج جستجو:{" "}
-                                                            <strong>{filteredProducts.length}</strong>
+                                                            | نتایج:{" "}
+                                                            <strong>
+                                                                {filteredProducts.length}
+                                                            </strong>
                                                         </>
                                                     )}
                                                 </div>
@@ -231,107 +271,74 @@ const ProductList = () => {
                                     {/* Table */}
                                     {loading ? (
                                         <div className="text-center py-5">
-                                            <Spinner color="primary" />
-                                            <div className="mt-3">
-                                                <h5 className="text-muted">در حال بارگذاری...</h5>
-                                            </div>
-                                        </div>
-                                    ) : products.length === 0 ? (
-                                        <div className="text-center py-5">
-                                            <div className="avatar-lg mx-auto mb-4">
-                                                <div className="avatar-title bg-soft-warning text-warning rounded-circle font-size-24">
-                                                    <i className="bx bx-info-circle"></i>
-                                                </div>
-                                            </div>
-                                            <h5 className="text-muted">هیچ کالایی ثبت نشده است</h5>
-                                            <p className="text-muted">
-                                                برای شروع، کالای جدیدی اضافه کنید
-                                            </p>
-                                            <Link
-                                                to="/inventory/add-product"
-                                                className="btn btn-success mt-2"
-                                            >
-                                                <i className="bx bx-plus-circle me-1"></i>
-                                                افزودن اولین کالا
-                                            </Link>
+                                            <Spinner />
+                                            <h5 className="mt-3 text-muted">
+                                                در حال بارگذاری...
+                                            </h5>
                                         </div>
                                     ) : filteredProducts.length === 0 ? (
                                         <div className="text-center py-5">
-                                            <div className="avatar-lg mx-auto mb-4">
-                                                <div className="avatar-title bg-soft-info text-info rounded-circle font-size-24">
-                                                    <i className="bx bx-search"></i>
-                                                </div>
-                                            </div>
-                                            <h5 className="text-muted">نتیجه‌ای یافت نشد</h5>
-                                            <p className="text-muted">
-                                                کالایی با این مشخصات پیدا نشد
-                                            </p>
-                                            <Button color="light" onClick={() => setSearchTerm("")}>
-                                                پاک کردن جستجو
-                                            </Button>
+                                            <h5 className="text-muted">کالایی یافت نشد</h5>
                                         </div>
                                     ) : (
                                         <div className="table-responsive">
-                                            <Table className="table table-hover table-nowrap align-middle mb-0">
+                                            <Table className="table table-hover align-middle">
                                                 <thead className="table-light">
                                                 <tr>
-                                                    <th style={{ width: "60px" }}>#</th>
+                                                    <th>#</th>
                                                     <th>نام کالا</th>
                                                     <th>کد کالا</th>
-                                                    <th>دسته‌بندی</th>
+                                                    <th>دسته</th>
                                                     <th>واحد</th>
-                                                    <th>موجودی</th>
+                                                    <th>حداقل موجودی</th>
                                                     <th>قیمت</th>
-                                                    <th style={{ width: "100px" }}>وضعیت</th>
-                                                    <th style={{ width: "160px" }}>عملیات</th>
+                                                    <th>وضعیت</th>
+                                                    <th>عملیات</th>
                                                 </tr>
                                                 </thead>
+
                                                 <tbody>
                                                 {filteredProducts.map((product, index) => (
                                                     <tr key={product.id}>
+                                                        <td>{index + 1}</td>
+
                                                         <td>
-                                                            <div className="avatar-xs">
-                                  <span className="avatar-title rounded-circle bg-soft-primary text-primary">
-                                    {index + 1}
-                                  </span>
-                                                            </div>
-                                                        </td>
-                                                        <td>
-                                                            <h5 className="font-size-14 mb-0">
-                                                                {product.name}
-                                                            </h5>
+                                                            <strong>{product.name}</strong>
+                                                            <br />
                                                             {product.barcode && (
                                                                 <small className="text-muted">
-                                                                    <i className="bx bx-barcode"></i> {product.barcode}
+                                                                    <i className="bx bx-barcode"></i>{" "}
+                                                                    {product.barcode}
                                                                 </small>
                                                             )}
                                                         </td>
+
                                                         <td>
-                                                            <Badge color="info" className="badge-soft-info" pill>
+                                                            <Badge
+                                                                pill
+                                                                color="info"
+                                                                className="badge-soft-info"
+                                                            >
                                                                 {product.sku}
                                                             </Badge>
                                                         </td>
+
+                                                        <td>{getCategoryName(product)}</td>
+                                                        <td>{getUnitName(product)}</td>
+
                                                         <td>
-                                <span className="text-muted">
-                                  {product.category?.name || "-"}
-                                </span>
+                                                            <Badge
+                                                                color="warning"
+                                                                className="badge-soft-warning"
+                                                            >
+                                                                {product.min_stock || 0}
+                                                            </Badge>
                                                         </td>
-                                                        <td>
-                                <span className="text-muted">
-                                  {product.unit?.name || "-"}
-                                </span>
-                                                        </td>
-                                                        <td>
-                                                            <strong>{product.quantity || 0}</strong>
-                                                        </td>
-                                                        <td>
-                                <span className="text-muted">
-                                  {formatPrice(product.price)}
-                                </span>
-                                                        </td>
-                                                        <td>
-                                                            {getStockBadge(product)}
-                                                        </td>
+
+                                                        <td>{formatPrice(product.price)}</td>
+
+                                                        <td>{renderStockBadge(product)}</td>
+
                                                         <td>
                                                             <div className="d-flex gap-2">
                                                                 <Link
@@ -340,11 +347,15 @@ const ProductList = () => {
                                                                 >
                                                                     <i className="bx bx-edit-alt"></i>
                                                                 </Link>
+
                                                                 <Button
                                                                     size="sm"
                                                                     color="soft-danger"
                                                                     onClick={() =>
-                                                                        handleDelete(product.id, product.name)
+                                                                        handleDelete(
+                                                                            product.id,
+                                                                            product.name
+                                                                        )
                                                                     }
                                                                 >
                                                                     <i className="bx bx-trash"></i>
