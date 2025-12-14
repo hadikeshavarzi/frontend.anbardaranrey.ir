@@ -1,5 +1,5 @@
 /* =====================================================================================
-   📌 API Helper – FINAL (اصلاح شده)
+   📌 API Helper – FINAL + DEBUG (برای پیدا کردن PUT اشتباه)
 ===================================================================================== */
 
 import axios from "axios";
@@ -19,10 +19,11 @@ if (!API_BASE) {
 ------------------------------------------------------------------ */
 const axiosApi = axios.create({
     baseURL: API_BASE,
+    timeout: 30000,
 });
 
 /* ------------------------------------------------------------------
-   🟦 Request Interceptor
+   🟦 Request Interceptor (LOG + TRACE)
 ------------------------------------------------------------------ */
 axiosApi.interceptors.request.use(
     (config) => {
@@ -32,8 +33,20 @@ axiosApi.interceptors.request.use(
             config.headers["Authorization"] = `Bearer ${token}`;
         }
 
-        console.log("📤 Request:", config.method?.toUpperCase(), config.url);
-        console.log("🔑 Token:", token ? "✅ موجود" : "❌ ندارد");
+        const method = config.method?.toUpperCase();
+        const url = config.url;
+
+        /* ---------- LOG BASIC ---------- */
+        console.log(`📤 ${method} ${url}`);
+
+        /* ---------- 🔥 DEBUG PUT RECEIPTS ---------- */
+        if (method === "PUT" && url?.includes("/receipts/")) {
+            console.group("🚨🚨 DETECTED PUT /receipts 🚨🚨");
+            console.log("URL:", url);
+            console.log("DATA:", config.data);
+            console.trace("📍 CALL STACK (WHO CALLED THIS PUT?)");
+            console.groupEnd();
+        }
 
         return config;
     },
@@ -41,19 +54,30 @@ axiosApi.interceptors.request.use(
 );
 
 /* ------------------------------------------------------------------
-   🟦 Response Interceptor
+   🟦 Response Interceptor (ERROR LOGGING)
 ------------------------------------------------------------------ */
 axiosApi.interceptors.response.use(
     (response) => {
-        console.log("✅ Response:", response.status, response.config.url);
+        const method = response.config.method?.toUpperCase();
+        const url = response.config.url;
+
+        console.log(`✅ ${method} ${url}`, response.status);
         return response;
     },
     (error) => {
-        console.error("❌ Response Error:", error.response?.status, error.config?.url);
-        console.error("📋 Error Data:", error.response?.data);
+        const status = error.response?.status;
+        const url = error.config?.url;
+        const method = error.config?.method?.toUpperCase();
 
-        // اگر 401 بود، logout کن
-        if (error.response?.status === 401) {
+        console.group("❌ API RESPONSE ERROR");
+        console.error("METHOD:", method);
+        console.error("URL:", url);
+        console.error("STATUS:", status);
+        console.error("DATA:", error.response?.data);
+        console.groupEnd();
+
+        // 🔐 اگر توکن منقضی شد
+        if (status === 401) {
             localStorage.removeItem("authToken");
             localStorage.removeItem("user");
             window.location.href = "/login";
@@ -83,44 +107,23 @@ export const del = (url, config = {}) =>
     axiosApi.delete(url, config).then((res) => res.data);
 
 /* =====================================================================================
-   🔥 OTP APIs (no token needed)
+   🔥 OTP APIs (NO TOKEN)
 ===================================================================================== */
 
 export async function requestOtp(mobile) {
-    try {
-        const res = await axios.post(`${API_BASE}/auth/request-otp`, { mobile });
-        console.log("📨 OTP Request:", res.data);
-        return res.data;
-    } catch (error) {
-        console.error("❌ OTP Request Error:", error);
-        throw error;
-    }
+    const res = await axios.post(`${API_BASE}/auth/request-otp`, { mobile });
+    return res.data;
 }
 
 export async function verifyOtp(mobile, otp) {
-    try {
-        const res = await axios.post(`${API_BASE}/auth/verify-otp`, { mobile, otp });
+    const res = await axios.post(`${API_BASE}/auth/verify-otp`, { mobile, otp });
 
-        console.log("🔍 Response structure:", res);
-        console.log("🔍 Response data:", res.data);
-
-        // ✅ اصلاح: res.data شامل { success, token, user } است
-        if (res.data && res.data.token) {
-            localStorage.setItem("authToken", res.data.token);
-            localStorage.setItem("user", JSON.stringify(res.data.user));
-
-            console.log("✅ Token saved:", res.data.token.slice(0, 30) + "...");
-            console.log("✅ User saved:", res.data.user.full_name);
-        } else {
-            console.error("⚠️ No token in response:", res.data);
-        }
-
-        return res.data;
-
-    } catch (error) {
-        console.error("❌ OTP Verify Error:", error);
-        throw error;
+    if (res.data?.token) {
+        localStorage.setItem("authToken", res.data.token);
+        localStorage.setItem("user", JSON.stringify(res.data.user));
     }
+
+    return res.data;
 }
 
 export default axiosApi;

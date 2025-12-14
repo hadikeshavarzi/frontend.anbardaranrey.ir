@@ -1,396 +1,296 @@
 // src/pages/Receipt/ReceiptList.jsx
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useState, useMemo } from "react";
 import {
-    Container,
-    Row,
-    Col,
-    Card,
-    CardBody,
-    Table,
-    Button,
-    Spinner,
-    Alert,
-    Badge,
-    Input,
+  Container,
+  Row,
+  Col,
+  Card,
+  CardBody,
+  CardHeader,
+  Table,
+  Button,
+  Spinner,
+  Badge,
+  Input,
+  UncontrolledTooltip,
 } from "reactstrap";
-import { Link } from "react-router-dom";
-import { get, del } from "../../helpers/api_helper";
+import { Link, useNavigate } from "react-router-dom";
 import moment from "moment-jalaali";
+import { supabase } from "../../helpers/supabase"; // کلاینت جدید
 
 const ReceiptList = () => {
-    const [receipts, setReceipts] = useState([]);
-    const [filteredReceipts, setFilteredReceipts] = useState([]);
-    const [loading, setLoading] = useState(true);
-    const [error, setError] = useState("");
-    const [success, setSuccess] = useState("");
-    const [searchTerm, setSearchTerm] = useState("");
+  const navigate = useNavigate();
+  const [receipts, setReceipts] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [searchTerm, setSearchTerm] = useState("");
 
-    const loadReceipts = async () => {
-        setLoading(true);
-        setError("");
+  // --- Load Data ---
+  const loadData = async () => {
+    setLoading(true);
+    try {
+      console.log("⚡ Fetching receipts...");
+      
+      let { data, error } = await supabase
+        .from('receipts')
+        .select(`
+          *,
+          owner:customers!fk_receipts_customer ( id, name, mobile ),
+          items:receipt_items!fk_items_receipt ( id, weights_net )
+        `)
+        .order('id', { ascending: false });
 
-        console.log("🔍 Loading receipts list...");
+      if (error) throw error;
+      setReceipts(data || []);
+    } catch (err) {
+      console.error("Supabase Error:", err);
+      // alert("خطا: " + err.message); // می‌توان کامنت کرد تا مزاحم نباشد
+    }
+    setLoading(false);
+  };
 
-        try {
-            const res = await get("/receipts?limit=1000");
-            console.log("✅ Receipts loaded successfully:", res);
+  useEffect(() => {
+    loadData();
+  }, []);
 
-            const receiptList = res?.docs || [];
-            setReceipts(receiptList);
-            setFilteredReceipts(receiptList);
-        } catch (err) {
-            console.error("❌ Error loading receipts:", err);
-            setError(err.response?.data?.message || "خطا در دریافت لیست رسیدها");
-        }
+  // --- Search & Filter ---
+  const filteredReceipts = useMemo(() => {
+    if (!searchTerm) return receipts;
+    const lower = searchTerm.toLowerCase();
+    
+    return receipts.filter(r => {
+      const rNo = String(r.receipt_no || r.id);
+      const ownerName = r.owner?.name || ""; // فیلد name در جدول customers
+      const driver = r.driver_name || "";
+      
+      return (
+        rNo.includes(lower) ||
+        ownerName.toLowerCase().includes(lower) ||
+        driver.toLowerCase().includes(lower)
+      );
+    });
+  }, [searchTerm, receipts]);
 
-        setLoading(false);
-    };
+  // --- Statistics ---
+  const stats = useMemo(() => {
+    const totalCount = receipts.length;
+    const finalCount = receipts.filter(r => r.status === 'final').length;
+    
+    const totalWeight = receipts.reduce((sum, r) => {
+        const receiptWeight = r.items?.reduce((s, i) => s + (i.weights_net || 0), 0) || 0;
+        return sum + receiptWeight;
+    }, 0);
+    
+    return { totalCount, finalCount, totalWeight };
+  }, [receipts]);
 
-    useEffect(() => {
-        loadReceipts();
-    }, []);
+  // --- Delete Handler ---
+  const handleDelete = async (id, receiptNo) => {
+    if (!window.confirm(`آیا از حذف رسید شماره "${receiptNo}" مطمئن هستید؟`)) return;
 
-    // جستجو
-    useEffect(() => {
-        if (searchTerm.trim() === "") {
-            setFilteredReceipts(receipts);
-        } else {
-            const filtered = receipts.filter(
-                (r) =>
-                    r.receiptNo?.toString().includes(searchTerm) ||
-                    r.owner?.name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                    r.owner?.full_name?.toLowerCase().includes(searchTerm.toLowerCase())
-            );
-            setFilteredReceipts(filtered);
-        }
-    }, [searchTerm, receipts]);
+    try {
+      const { error } = await supabase
+        .from('receipts')
+        .delete()
+        .eq('id', id);
 
-    const handleDelete = async (id, receiptNo) => {
-        if (!window.confirm(`آیا از حذف رسید شماره "${receiptNo}" مطمئن هستید؟`))
-            return;
+      if (error) throw error;
 
-        console.log("🗑️ Deleting receipt with ID:", id);
+      setReceipts(prev => prev.filter(r => r.id !== id));
+    } catch (err) {
+      console.error(err);
+      alert("خطا در حذف: " + err.message);
+    }
+  };
 
-        try {
-            await del(`/receipts/${id}`);
-            console.log("✅ Delete successful");
+  // --- Render Helpers ---
+  const formatDate = (date) => date ? moment(date).format("jYYYY/jMM/jDD") : "-";
 
-            setReceipts((prev) => prev.filter((r) => r.id !== id));
-            setFilteredReceipts((prev) => prev.filter((r) => r.id !== id));
+  const getStatusBadge = (status) => {
+    switch (status) {
+      case "final": return <Badge color="success" className="font-size-12"><i className="bx bx-check-double me-1"></i>نهایی</Badge>;
+      case "draft": return <Badge color="warning" className="font-size-12"><i className="bx bx-pencil me-1"></i>پیش‌نویس</Badge>;
+      default: return <Badge color="secondary">نامشخص</Badge>;
+    }
+  };
 
-            setSuccess(`رسید شماره "${receiptNo}" با موفقیت حذف شد`);
-            setError("");
-
-            setTimeout(() => setSuccess(""), 3000);
-        } catch (err) {
-            console.error("❌ Delete error:", err);
-
-            if (err.response?.status === 404) {
-                setError("رسید مورد نظر یافت نشد.");
-                setReceipts((prev) => prev.filter((r) => r.id !== id));
-                setFilteredReceipts((prev) => prev.filter((r) => r.id !== id));
-            } else if (err.response?.status === 400) {
-                setError("این رسید دارای تراکنش‌های مرتبط است و قابل حذف نیست.");
-            } else {
-                setError(err.response?.data?.message || "خطا در حذف رسید");
-            }
-        }
-    };
-
-    // فرمت تاریخ شمسی
-    const formatDate = (date) => {
-        if (!date) return "-";
-        return moment(date).format("jYYYY/jMM/jDD");
-    };
-
-    // بج وضعیت
-    const getStatusBadge = (status) => {
-        if (status === "final") {
-            return (
-                <Badge color="success" className="badge-soft-success">
-                    ثبت قطعی
-                </Badge>
-            );
-        } else if (status === "draft") {
-            return (
-                <Badge color="warning" className="badge-soft-warning">
-                    پیش‌نویس
-                </Badge>
-            );
-        } else {
-            return (
-                <Badge color="secondary" className="badge-soft-secondary">
-                    نامشخص
-                </Badge>
-            );
-        }
-    };
-
+  const renderPlate = (row) => {
+    if (!row.plate_mid3) return <span className="text-muted">-</span>;
     return (
-        <React.Fragment>
-            <div className="page-content">
-                <Container fluid>
-                    {/* Breadcrumb */}
-                    <div className="page-title-box d-sm-flex align-items-center justify-content-between">
-                        <h4 className="mb-sm-0 font-size-18">رسیدها</h4>
-
-                        <div className="page-title-right">
-                            <ol className="breadcrumb m-0">
-                                <li className="breadcrumb-item">
-                                    <Link to="/dashboard">داشبورد</Link>
-                                </li>
-                                <li className="breadcrumb-item active">رسیدها</li>
-                            </ol>
-                        </div>
-                    </div>
-
-                    <Row>
-                        <Col lg={12}>
-                            <Card>
-                                <CardBody>
-                                    {/* Header */}
-                                    <div className="d-flex flex-wrap align-items-center justify-content-between mb-4">
-                                        <div>
-                                            <h4 className="card-title mb-1">لیست رسیدها</h4>
-                                            <p className="card-title-desc mb-0">
-                                                مدیریت رسیدهای ورود کالا به انبار
-                                            </p>
-                                        </div>
-
-                                        <div className="d-flex flex-wrap gap-2">
-                                            <Button
-                                                color="light"
-                                                onClick={loadReceipts}
-                                                disabled={loading}
-                                            >
-                                                <i className="bx bx-refresh me-1"></i>
-                                                بروزرسانی
-                                            </Button>
-
-                                            <Link
-                                                to="/receipt/form"
-                                                className="btn btn-success"
-                                            >
-                                                <i className="bx bx-plus-circle me-1"></i>
-                                                ثبت رسید جدید
-                                            </Link>
-                                        </div>
-                                    </div>
-
-                                    {/* Alerts */}
-                                    {error && (
-                                        <Alert
-                                            color="danger"
-                                            className="alert-dismissible fade show"
-                                        >
-                                            <i className="mdi mdi-block-helper me-2"></i>
-                                            {error}
-                                            <button
-                                                type="button"
-                                                className="btn-close"
-                                                onClick={() => setError("")}
-                                            ></button>
-                                        </Alert>
-                                    )}
-
-                                    {success && (
-                                        <Alert
-                                            color="success"
-                                            className="alert-dismissible fade show"
-                                        >
-                                            <i className="mdi mdi-check-all me-2"></i>
-                                            {success}
-                                            <button
-                                                type="button"
-                                                className="btn-close"
-                                                onClick={() => setSuccess("")}
-                                            ></button>
-                                        </Alert>
-                                    )}
-
-                                    {/* Search & Stats */}
-                                    {!loading && receipts.length > 0 && (
-                                        <Row className="mb-3">
-                                            <Col md={6}>
-                                                <div className="search-box">
-                                                    <div className="position-relative">
-                                                        <Input
-                                                            type="text"
-                                                            className="form-control"
-                                                            placeholder="جستجو بر اساس شماره رسید یا نام مالک..."
-                                                            value={searchTerm}
-                                                            onChange={(e) => setSearchTerm(e.target.value)}
-                                                        />
-                                                        <i className="bx bx-search-alt search-icon"></i>
-                                                    </div>
-                                                </div>
-                                            </Col>
-                                            <Col md={6} className="text-end">
-                                                <div className="text-muted">
-                                                    تعداد کل: <strong>{receipts.length}</strong> رسید
-                                                    {searchTerm && (
-                                                        <>
-                                                            {" "}
-                                                            | نتایج جستجو:{" "}
-                                                            <strong>{filteredReceipts.length}</strong>
-                                                        </>
-                                                    )}
-                                                </div>
-                                            </Col>
-                                        </Row>
-                                    )}
-
-                                    {/* Table */}
-                                    {loading ? (
-                                        <div className="text-center py-5">
-                                            <Spinner color="primary" />
-                                            <div className="mt-3">
-                                                <h5 className="text-muted">در حال بارگذاری...</h5>
-                                            </div>
-                                        </div>
-                                    ) : receipts.length === 0 ? (
-                                        <div className="text-center py-5">
-                                            <div className="avatar-lg mx-auto mb-4">
-                                                <div className="avatar-title bg-soft-warning text-warning rounded-circle font-size-24">
-                                                    <i className="bx bx-info-circle"></i>
-                                                </div>
-                                            </div>
-                                            <h5 className="text-muted">هیچ رسیدی ثبت نشده است</h5>
-                                            <p className="text-muted">
-                                                برای شروع، رسید جدیدی اضافه کنید
-                                            </p>
-                                            <Link to="/receipt/form" className="btn btn-success mt-2">
-                                                <i className="bx bx-plus-circle me-1"></i>
-                                                ثبت اولین رسید
-                                            </Link>
-                                        </div>
-                                    ) : filteredReceipts.length === 0 ? (
-                                        <div className="text-center py-5">
-                                            <div className="avatar-lg mx-auto mb-4">
-                                                <div className="avatar-title bg-soft-info text-info rounded-circle font-size-24">
-                                                    <i className="bx bx-search"></i>
-                                                </div>
-                                            </div>
-                                            <h5 className="text-muted">نتیجه‌ای یافت نشد</h5>
-                                            <p className="text-muted">رسیدی با این مشخصات پیدا نشد</p>
-                                            <Button color="light" onClick={() => setSearchTerm("")}>
-                                                پاک کردن جستجو
-                                            </Button>
-                                        </div>
-                                    ) : (
-                                        <div className="table-responsive">
-                                            <Table className="table table-hover table-nowrap align-middle mb-0">
-                                                <thead className="table-light">
-                                                <tr>
-                                                    <th style={{ width: "60px" }}>#</th>
-                                                    <th>شماره رسید</th>
-                                                    <th>تاریخ سند</th>
-                                                    <th>مالک</th>
-                                                    <th>تحویل دهنده</th>
-                                                    <th>تعداد اقلام</th>
-                                                    <th style={{ width: "100px" }}>وضعیت</th>
-                                                    <th style={{ width: "180px" }}>عملیات</th>
-                                                </tr>
-                                                </thead>
-                                                <tbody>
-                                                {filteredReceipts.map((receipt, index) => (
-                                                    <tr key={receipt.id}>
-                                                        <td>
-                                                            <div className="avatar-xs">
-                                                                <span className="avatar-title rounded-circle bg-soft-primary text-primary">
-                                                                    {index + 1}
-                                                                </span>
-                                                            </div>
-                                                        </td>
-                                                        <td>
-                                                            <h5 className="font-size-14 mb-0">
-                                                                <Badge color="info" className="badge-soft-info" pill>
-                                                                    #{receipt.receiptNo || receipt.id}
-                                                                </Badge>
-                                                            </h5>
-                                                        </td>
-                                                        <td>
-                                                            <span className="text-muted">
-                                                                <i className="bx bx-calendar me-1"></i>
-                                                                {formatDate(receipt.docDate)}
-                                                            </span>
-                                                        </td>
-                                                        <td>
-                                                            <h5 className="font-size-14 mb-0">
-                                                                {receipt.owner?.name ||
-                                                                    receipt.owner?.full_name ||
-                                                                    "-"}
-                                                            </h5>
-                                                            {receipt.owner?.mobile && (
-                                                                <small className="text-muted">
-                                                                    <i className="bx bx-phone"></i>{" "}
-                                                                    {receipt.owner.mobile}
-                                                                </small>
-                                                            )}
-                                                        </td>
-                                                        <td>
-                                                            <span className="text-muted">
-                                                                {receipt.deliverer?.name ||
-                                                                    receipt.deliverer?.full_name ||
-                                                                    "-"}
-                                                            </span>
-                                                        </td>
-                                                        <td>
-                                                            <strong>
-                                                                {Array.isArray(receipt.items)
-                                                                    ? receipt.items.length
-                                                                    : 0}
-                                                            </strong>{" "}
-                                                            <small className="text-muted">قلم</small>
-                                                        </td>
-                                                        <td>{getStatusBadge(receipt.status)}</td>
-                                                        <td>
-                                                            <div className="d-flex gap-2">
-                                                                <Link
-                                                                    to={`/receipts/view/${receipt.id}`}
-                                                                    className="btn btn-sm btn-soft-info"
-                                                                    title="مشاهده"
-                                                                >
-                                                                    <i className="bx bx-show"></i>
-                                                                </Link>
-
-                                                                <Link
-                                                                    to={`/receipts/edit/${receipt.id}`}
-                                                                    className="btn btn-sm btn-soft-primary"
-                                                                    title="ویرایش"
-                                                                >
-                                                                    <i className="bx bx-edit-alt"></i>
-                                                                </Link>
-
-                                                                <Button
-                                                                    size="sm"
-                                                                    color="soft-danger"
-                                                                    onClick={() =>
-                                                                        handleDelete(
-                                                                            receipt.id,
-                                                                            receipt.receiptNo || receipt.id
-                                                                        )
-                                                                    }
-                                                                    title="حذف"
-                                                                >
-                                                                    <i className="bx bx-trash"></i>
-                                                                </Button>
-                                                            </div>
-                                                        </td>
-                                                    </tr>
-                                                ))}
-                                                </tbody>
-                                            </Table>
-                                        </div>
-                                    )}
-                                </CardBody>
-                            </Card>
-                        </Col>
-                    </Row>
-                </Container>
-            </div>
-        </React.Fragment>
+      <div dir="ltr" className="d-inline-flex align-items-center bg-light border rounded px-2 py-1" style={{fontSize: '0.75rem'}}>
+        <span className="fw-bold mx-1">{row.plate_left2}</span>
+        <span className="mx-1">{row.plate_letter}</span>
+        <span className="fw-bold mx-1">{row.plate_mid3}</span>
+        <span className="border-start ps-1 ms-1 text-muted" style={{fontSize: '0.65rem'}}>IR {row.plate_iran_right}</span>
+      </div>
     );
+  };
+
+  return (
+    <div className="page-content">
+      <Container fluid>
+        {/* Breadcrumb */}
+        <div className="page-title-box d-sm-flex align-items-center justify-content-between mb-4">
+          <h4 className="mb-sm-0 font-size-18">لیست رسیدهای انبار</h4>
+          <div className="page-title-right">
+            <ol className="breadcrumb m-0">
+              <li className="breadcrumb-item"><Link to="/dashboard">داشبورد</Link></li>
+              <li className="breadcrumb-item active">رسیدها</li>
+            </ol>
+          </div>
+        </div>
+
+        {/* Stats Cards */}
+        <Row className="mb-3">
+          <Col md={4}>
+            <Card className="mini-stats-wid">
+              <CardBody>
+                <div className="d-flex">
+                  <div className="flex-grow-1">
+                    <p className="text-muted fw-medium">تعداد کل رسیدها</p>
+                    <h4 className="mb-0">{stats.totalCount}</h4>
+                  </div>
+                  <div className="flex-shrink-0 align-self-center">
+                    <div className="avatar-sm rounded-circle bg-primary mini-stat-icon">
+                      <span className="avatar-title rounded-circle bg-primary"><i className="bx bx-file font-size-24"></i></span>
+                    </div>
+                  </div>
+                </div>
+              </CardBody>
+            </Card>
+          </Col>
+          <Col md={4}>
+            <Card className="mini-stats-wid">
+              <CardBody>
+                <div className="d-flex">
+                  <div className="flex-grow-1">
+                    <p className="text-muted fw-medium">رسیدهای نهایی</p>
+                    <h4 className="mb-0">{stats.finalCount}</h4>
+                  </div>
+                  <div className="flex-shrink-0 align-self-center">
+                    <div className="avatar-sm rounded-circle bg-success mini-stat-icon">
+                      <span className="avatar-title rounded-circle bg-success"><i className="bx bx-check-circle font-size-24"></i></span>
+                    </div>
+                  </div>
+                </div>
+              </CardBody>
+            </Card>
+          </Col>
+          <Col md={4}>
+            <Card className="mini-stats-wid">
+              <CardBody>
+                <div className="d-flex">
+                  <div className="flex-grow-1">
+                    <p className="text-muted fw-medium">مجموع وزن وارده</p>
+                    <h4 className="mb-0">{stats.totalWeight.toLocaleString()} <span className="font-size-12 text-muted">kg</span></h4>
+                  </div>
+                  <div className="flex-shrink-0 align-self-center">
+                    <div className="avatar-sm rounded-circle bg-info mini-stat-icon">
+                      <span className="avatar-title rounded-circle bg-info"><i className="bx bx-weight font-size-24"></i></span>
+                    </div>
+                  </div>
+                </div>
+              </CardBody>
+            </Card>
+          </Col>
+        </Row>
+
+        <Row>
+          <Col lg={12}>
+            <Card>
+              <CardHeader className="bg-transparent border-bottom">
+                <div className="d-flex flex-wrap align-items-center justify-content-between">
+                  <h5 className="card-title mb-0">مدیریت رسیدها</h5>
+                  <div className="d-flex gap-2">
+                      <Button color="light" onClick={loadData} disabled={loading}>
+                        <i className={`bx bx-refresh font-size-16 align-middle me-1 ${loading ? 'bx-spin' : ''}`}></i> بروزرسانی
+                      </Button>
+                      {/* ✅ روت صحیح برای ثبت جدید */}
+                      <Button color="primary" onClick={() => navigate("/receipt/form")}>
+                        <i className="bx bx-plus font-size-16 align-middle me-1"></i> ثبت رسید جدید
+                      </Button>
+                  </div>
+                </div>
+              </CardHeader>
+              
+              <CardBody>
+                <Row className="mb-4">
+                  <Col md={4}>
+                    <div className="search-box me-2 mb-2 d-inline-block w-100">
+                      <div className="position-relative">
+                        <Input type="text" className="form-control" placeholder="جستجو (شماره، مالک، راننده)..." value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} />
+                        <i className="bx bx-search-alt search-icon"></i>
+                      </div>
+                    </div>
+                  </Col>
+                </Row>
+
+                {loading ? (
+                  <div className="text-center py-5">
+                    <Spinner color="primary" />
+                    <p className="mt-2">در حال دریافت اطلاعات...</p>
+                  </div>
+                ) : filteredReceipts.length === 0 ? (
+                  <div className="text-center py-5 text-muted">
+                    <i className="bx bx-folder-open display-4"></i>
+                    <p className="mt-3">هیچ رسیدی یافت نشد.</p>
+                  </div>
+                ) : (
+                  <div className="table-responsive">
+                    <Table className="table align-middle table-nowrap table-hover mb-0">
+                      <thead className="table-light">
+                        <tr>
+                          <th style={{width: '70px'}}>شماره</th>
+                          <th>تاریخ</th>
+                          <th>مالک کالا</th>
+                          <th>پلاک خودرو</th>
+                          <th>تعداد</th>
+                          <th>وزن (kg)</th>
+                          <th>وضعیت</th>
+                          <th style={{width: '150px'}}>عملیات</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {filteredReceipts.map((row) => {
+                           const weight = row.items?.reduce((s, i) => s + (i.weights_net || 0), 0) || 0;
+                           const count = row.items?.length || 0;
+                           
+                           return (
+                            <tr key={row.id}>
+                                <td><span className="fw-bold text-primary">#{row.receipt_no || row.id}</span></td>
+                                <td><i className="bx bx-calendar text-muted me-1"></i>{formatDate(row.doc_date)}</td>
+                                <td><h5 className="font-size-14 mb-1 text-dark">{row.owner?.name || "ناشناس"}</h5></td>
+                                <td>{renderPlate(row)}</td>
+                                <td><Badge color="soft-primary" className="font-size-12 badge-soft-primary">{count} قلم</Badge></td>
+                                <td><span className="fw-bold">{weight.toLocaleString()}</span></td>
+                                <td>{getStatusBadge(row.status)}</td>
+                                <td>
+                                <div className="d-flex gap-2">
+                                    {/* ✅ روت صحیح برای ویرایش */}
+                                    <Link to={`/receipt/form/edit/${row.id}`} className="btn btn-sm btn-soft-info" id={`edit-${row.id}`}>
+                                        <i className="bx bx-edit-alt font-size-14"></i>
+                                    </Link>
+                                    <UncontrolledTooltip placement="top" target={`edit-${row.id}`}>ویرایش / مشاهده</UncontrolledTooltip>
+
+                                    <button className="btn btn-sm btn-soft-danger" onClick={() => handleDelete(row.id, row.receipt_no)} id={`del-${row.id}`}>
+                                        <i className="bx bx-trash font-size-14"></i>
+                                    </button>
+                                    <UncontrolledTooltip placement="top" target={`del-${row.id}`}>حذف</UncontrolledTooltip>
+                                </div>
+                                </td>
+                            </tr>
+                           );
+                        })}
+                      </tbody>
+                    </Table>
+                  </div>
+                )}
+              </CardBody>
+            </Card>
+          </Col>
+        </Row>
+      </Container>
+    </div>
+  );
 };
 
 export default ReceiptList;

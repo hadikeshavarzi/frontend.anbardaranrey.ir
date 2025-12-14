@@ -29,12 +29,13 @@ import EditCustomer from "../pages/Customers/EditCustomer";
 
 /* Receipt */
 import ReceiptForm from "../pages/Receipt/ReceiptForm";
-import ReceiptsList from "../pages/Receipt/ReceiptsList";
-import ReceiptView from "../pages/Receipt/ReceiptView";
-import EditReceipt from "../pages/Receipt/EditReceipt";
+
+// ✅ اصلاح شد: نام فایل احتمالا ReceiptsList.jsx است (با s)
+// همچنین متغیر را ReceiptsList نامیدیم تا با پایین کد هماهنگ باشد
+import ReceiptsList from "../pages/Receipt/ReceiptsList"; 
 
 /* Clearance */
-import ClearancesAdd from "../pages/Clearance/ClearancesAdd";  // ✅ اضافه شد
+import ClearancesAdd from "../pages/Clearance/ClearancesAdd";
 
 /* Auth */
 import Login from "../pages/Authentication/Login";
@@ -71,16 +72,29 @@ const authProtectedRoutes = [
   { path: "/inventory/add-product", component: <AddProduct /> },
   { path: "/inventory/edit-product/:id", component: <EditProduct /> },
 
-  /* Receipt */
-  { path: "/receipt/form", component: <ReceiptForm /> },
-  { path: "/receipt/list", component: <ReceiptsList /> },
-  { path: "/receipts/view/:id", component: <ReceiptView /> },
-  { path: "/receipts/edit/:id", component: <EditReceipt /> },
+  /* ================= Receipt Routes (Fixed) ================= */
+  
+  // 1. لیست اصلی رسیدها
+  // ✅ الان کامپوننت ReceiptsList از ایمپورت بالا خوانده می‌شود
+  { path: "/receipts", component: <ReceiptsList /> },
+
+  // 2. ثبت رسید جدید
+  { path: "/receipt/form", component: <ReceiptForm mode="create" /> },
+
+  // 3. ویرایش رسید
+  { path: "/receipt/form/edit/:id", component: <ReceiptForm mode="edit" /> },
+
+  // 4. مشاهده رسید (فقط خواندنی)
+  { path: "/receipt/view/:id", component: <ReceiptForm mode="view" /> },
+
+  // * ریدایرکت لینک قدیمی به جدید
+  { path: "/receipt/list", component: <Navigate to="/receipts" /> },
+  /* ========================================================== */
 
   /* Clearance */
-  { path: "/clearances/add", component: <ClearancesAdd /> },  // ✅ اصلاح شد
+  { path: "/clearances/add", component: <ClearancesAdd /> },
 
-  /* Default */
+  /* Default Redirect */
   { path: "/", exact: true, component: <Navigate to="/dashboard" /> },
 ];
 

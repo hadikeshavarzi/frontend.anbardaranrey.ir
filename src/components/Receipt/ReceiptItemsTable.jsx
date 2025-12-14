@@ -185,66 +185,21 @@ const COLUMN_LABELS = {
     rowCode: "کد ردیف",
 };
 
-// ترتیب پیش‌فرض ستون‌ها
 const DEFAULT_COLUMN_ORDER = [
-    "actions",
-    "id",
-    "nationalProductId",
-    "categoryId",
-    "productId",
-    "productDescription",
-    "productionType",
-    "count",
-    "unit",
-    "fullWeight",
-    "emptyWeight",
-    "netWeight",
-    "originWeight",
-    "weightDiff",
-    "isUsed",
-    "isDefective",
-    "length",
-    "width",
-    "thickness",
-    "heatNumber",
-    "bundleNo",
-    "brand",
-    "orderNo",
-    "parentRow",
-    "depoLocation",
-    "descriptionNotes",
-    "rowCode",
+    "actions", "id", "nationalProductId", "categoryId", "productId",
+    "productDescription", "productionType", "count", "unit", "fullWeight",
+    "emptyWeight", "netWeight", "originWeight", "weightDiff", "isUsed",
+    "isDefective", "length", "width", "thickness", "heatNumber", "bundleNo",
+    "brand", "orderNo", "parentRow", "depoLocation", "descriptionNotes", "rowCode",
 ];
 
-// عرض پیش‌فرض ستون‌ها
 const DEFAULT_COLUMN_WIDTHS = {
-    actions: 60,
-    id: 50,
-    nationalProductId: 140,
-    categoryId: 180,
-    productId: 200,
-    productDescription: 150,
-    productionType: 100,
-    count: 90,
-    unit: 80,
-    fullWeight: 100,
-    emptyWeight: 100,
-    netWeight: 100,
-    originWeight: 100,
-    weightDiff: 100,
-    isUsed: 70,
-    isDefective: 70,
-    length: 80,
-    width: 80,
-    thickness: 80,
-    heatNumber: 100,
-    bundleNo: 100,
-    brand: 100,
-    orderNo: 100,
-    parentRow: 100,
-    depoLocation: 120,
-    descriptionNotes: 150,
-    rowCode: 100,
+    actions: 60, id: 50, nationalProductId: 140, categoryId: 180, productId: 200,
+    productDescription: 150, productionType: 100, count: 90, unit: 80,
+    fullWeight: 100, emptyWeight: 100, netWeight: 100, originWeight: 100,
+    weightDiff: 100, isUsed: 70, isDefective: 70, length: 80, width: 80,
+    thickness: 80, heatNumber: 100, bundleNo: 100, brand: 100, orderNo: 100,
+    parentRow: 100, depoLocation: 120, descriptionNotes: 150, rowCode: 100,
 };
 
 const DEFAULT_VIS = Object.fromEntries(
@@ -253,9 +208,6 @@ const DEFAULT_VIS = Object.fromEntries(
 
 const STORAGE_KEY = "receiptTable_settings_v3";
 
-/* ==========================================
-   ذخیره و بازیابی تنظیمات
-========================================== */
 const loadSettings = () => {
     try {
         const saved = localStorage.getItem(STORAGE_KEY);
@@ -286,20 +238,22 @@ const saveSettings = (settings) => {
 };
 
 /* ==========================================
-   کامپوننت ورودی عددی
+   کامپوننت ورودی عددی - اصلاح شده
 ========================================== */
 const NumericInput = memo(({ value, onChange, onBlur, ...props }) => {
-    const [displayValue, setDisplayValue] = useState("");
     const [isFocused, setIsFocused] = useState(false);
 
-    useEffect(() => {
-        if (value === null || value === undefined) setDisplayValue("");
-        else setDisplayValue(Number(value).toLocaleString("en-US"));
+    // ✅ مستقیماً displayValue را محاسبه کن
+    const displayValue = useMemo(() => {
+        if (value === null || value === undefined || value === "" || value === 0) {
+            if (value === 0) return "0";
+            return "";
+        }
+        return Number(value).toLocaleString("en-US");
     }, [value]);
 
     const handleChange = (e) => {
         const raw = e.target.value.replace(/[^0-9.]/g, "");
-        setDisplayValue(raw.replace(/\B(?=(\d{3})+(?!\d))/g, ","));
         onChange(raw);
     };
 
@@ -324,27 +278,39 @@ const NumericInput = memo(({ value, onChange, onBlur, ...props }) => {
 });
 
 /* ==========================================
-   کامپوننت سلول قابل ویرایش
+   کامپوننت سلول قابل ویرایش - اصلاح شده
 ========================================== */
 const EditableCell = memo(
-    ({ value: initialValue, row, column, updateData, type = "text" }) => {
-        const [value, setValue] = useState(initialValue);
+    ({ getValue, row, column, table, updateData, type = "text" }) => {
+        // ✅ مقدار را از getValue بگیر
+        const initialValue = getValue ? getValue() : undefined;
+        const [localValue, setLocalValue] = useState(initialValue);
         const [isFocused, setIsFocused] = useState(false);
 
-        useEffect(() => setValue(initialValue), [initialValue]);
+        useEffect(() => {
+            setLocalValue(initialValue);
+        }, [initialValue]);
 
-        const onBlur = () => updateData(row.index, column.id, value);
+        const onBlur = () => {
+            updateData(row.index, column.id, localValue);
+        };
 
         if (type === "number") {
-            return <NumericInput value={value} onChange={setValue} onBlur={onBlur} />;
+            return (
+                <NumericInput
+                    value={localValue}
+                    onChange={setLocalValue}
+                    onBlur={onBlur}
+                />
+            );
         }
 
         return (
             <input
                 type="text"
                 className="form-control form-control-sm"
-                value={value || ""}
-                onChange={(e) => setValue(e.target.value)}
+                value={localValue ?? ""}
+                onChange={(e) => setLocalValue(e.target.value)}
                 onBlur={() => {
                     setIsFocused(false);
                     onBlur();
@@ -358,21 +324,13 @@ const EditableCell = memo(
         );
     }
 );
-
 /* ==========================================
    کامپوننت هدر قابل درگ و ریسایز
 ========================================== */
 const DraggableHeader = ({
-                             columnId,
-                             columnWidth,
-                             onResize,
-                             onDragStart,
-                             onDragOver,
-                             onDrop,
-                             isDragging,
-                             isDragOver,
-                             children,
-                         }) => {
+    columnId, columnWidth, onResize, onDragStart, onDragOver, onDrop,
+    isDragging, isDragOver, children,
+}) => {
     const [isResizing, setIsResizing] = useState(false);
     const startXRef = useRef(0);
     const startWidthRef = useRef(0);
@@ -409,46 +367,21 @@ const DraggableHeader = ({
             onDragEnd={(e) => e.target.style.opacity = "1"}
             style={{
                 ...styles.th,
-                width: columnWidth,
-                minWidth: columnWidth,
-                maxWidth: columnWidth,
+                width: columnWidth, minWidth: columnWidth, maxWidth: columnWidth,
                 opacity: isDragging ? 0.5 : 1,
                 backgroundColor: isDragOver ? "rgba(85, 110, 230, 0.1)" : undefined,
                 borderRight: isDragOver ? `2px solid ${SKOTE_COLORS.primary}` : undefined,
                 transition: "background-color 0.2s, opacity 0.2s",
             }}
         >
-            {/* Resize Handle */}
             <div
-                style={{
-                    ...styles.resizeHandle,
-                    backgroundColor: isResizing ? SKOTE_COLORS.primary : "transparent",
-                }}
+                style={{ ...styles.resizeHandle, backgroundColor: isResizing ? SKOTE_COLORS.primary : "transparent" }}
                 onMouseDown={handleResizeStart}
                 title="تغییر اندازه"
             />
-
-            {/* Content */}
-            <div
-                style={{
-                    cursor: "grab",
-                    display: "flex",
-                    alignItems: "center",
-                    justifyContent: "center",
-                    gap: "4px",
-                }}
-            >
-                <i
-                    className="bx bx-grid-vertical"
-                    style={{
-                        fontSize: "0.75rem",
-                        opacity: 0.4,
-                        flexShrink: 0,
-                    }}
-                />
-                <span style={{ overflow: "hidden", textOverflow: "ellipsis" }}>
-          {children}
-        </span>
+            <div style={{ cursor: "grab", display: "flex", alignItems: "center", justifyContent: "center", gap: "4px" }}>
+                <i className="bx bx-grid-vertical" style={{ fontSize: "0.75rem", opacity: 0.4, flexShrink: 0 }} />
+                <span style={{ overflow: "hidden", textOverflow: "ellipsis" }}>{children}</span>
             </div>
         </th>
     );
@@ -464,9 +397,7 @@ const StatCard = ({ icon, label, value, color, bgColor }) => (
         </div>
         <div>
             <div style={{ fontSize: "0.75rem", color: SKOTE_COLORS.muted }}>{label}</div>
-            <div style={{ fontSize: "1rem", fontWeight: 600, color: SKOTE_COLORS.dark }}>
-                {value}
-            </div>
+            <div style={{ fontSize: "1rem", fontWeight: 600, color: SKOTE_COLORS.dark }}>{value}</div>
         </div>
     </div>
 );
@@ -481,125 +412,166 @@ const ReceiptItemsTable = ({ onItemsChange, ownerId, initialItems }) => {
     const [showColumnModal, setShowColumnModal] = useState(false);
     const [hoveredRow, setHoveredRow] = useState(null);
     const productsCacheRef = useRef({});
-    const isDataLoaded = useRef(false);
-    // Drag state
+
+    // ✅ Refs برای جلوگیری از race condition
+    const isLoadingItems = useRef(false);
+    const hasLoadedInitialItems = useRef(false);
+
     const [draggedColumn, setDraggedColumn] = useState(null);
     const [dragOverColumn, setDragOverColumn] = useState(null);
 
-    // تنظیمات ذخیره‌شده
     const [settings, setSettings] = useState(loadSettings);
     const { columnOrder, columnWidths, columnVisibility } = settings;
 
-    // ذخیره تنظیمات هنگام تغییر
     useEffect(() => {
         saveSettings(settings);
     }, [settings]);
 
-    /* --- آمار --- */
     const summary = useMemo(
-        () =>
-            data.reduce(
-                (s, r) => ({
-                    count: s.count + Number(r.count || 0),
-                    netWeight: s.netWeight + Number(r.netWeight || 0),
-                    items: s.items + 1,
-                }),
-                { count: 0, netWeight: 0, items: 0 }
-            ),
+        () => data.reduce(
+            (s, r) => ({
+                count: s.count + Number(r.count || 0),
+                netWeight: s.netWeight + Number(r.netWeight || 0),
+                items: s.items + 1,
+            }),
+            { count: 0, netWeight: 0, items: 0 }
+        ),
         [data]
     );
 
-    /* --- دریافت دسته‌بندی‌ها --- */
     useEffect(() => {
         get("/product-categories?limit=500")
             .then((res) => setCategories(res.data || []))
             .catch(console.error);
     }, []);
 
-const loadProductsForCategory = useCallback(
-    async (catId) => {
-        if (!catId) return;
-
-        // اگر در کش هست (چه دیتای کامل، چه علامت در حال لود)، خارج شو
-        if (productsCacheRef.current[catId]) return;
-
-        // 1. علامت‌گذاری فوری (Prevent Race Condition)
-        productsCacheRef.current[catId] = []; // موقتاً یک آرایه خالی یا true می‌گذاریم
+    const loadProductsForCategory = useCallback(async (catId) => {
+        if (!catId || productsCacheRef.current[catId]) return;
+        productsCacheRef.current[catId] = [];
 
         try {
             const res = await get(`/products?category_id=${catId}&limit=500`);
             const list = res.data || [];
-
-            // 2. آپدیت کش با دیتای واقعی
             productsCacheRef.current[catId] = list;
-
-            setProductsByCat((prev) => ({
-                ...prev,
-                [catId]: list,
-            }));
+            setProductsByCat((prev) => ({ ...prev, [catId]: list }));
         } catch (err) {
             console.error("Load products failed:", err);
-            // در صورت خطا، کش را پاک کنید تا دوباره تلاش کند
             delete productsCacheRef.current[catId];
         }
-    },
-    []
-);
+    }, []);
 
-
-    /* --- مپ کردن داده‌های اولیه --- */
-/* --- مپ کردن داده‌های اولیه (اصلاح شده) --- */
+    /* ==========================================
+       ✅ مپ کردن داده‌های اولیه - اصلاح شده
+    ========================================== */
     useEffect(() => {
-        // اگر داده‌ها قبلاً لود شده‌اند یا داده‌ای برای لود وجود ندارد، خارج شو
-        if (isDataLoaded.current || !initialItems || initialItems.length === 0) return;
+        if (!initialItems || initialItems.length === 0) {
+            console.log("❌ No initialItems");
+            return;
+        }
 
-        const mapped = initialItems.map((r, idx) => ({
-            id: idx + 1,
-            realId: r.id,
-            categoryId: r.category_id,
-            productId: r.product_id,
-            nationalProductId: r.national_product_id,
-            productDescription: r.product_description,
-            rowCode: r.row_code,
-            parentRow: r.parent_row,
-            count: r.count,
-            unit: r.unit || "kg",
-            productionType: r.production_type || "domestic",
-            isUsed: r.is_used || false,
-            isDefective: r.is_defective || false,
-            fullWeight: r.weights_full,
-            emptyWeight: r.weights_empty,
-            netWeight: r.weights_net,
-            originWeight: r.weights_origin,
-            weightDiff: r.weights_diff,
-            length: r.dim_length,
-            width: r.dim_width,
-            thickness: r.dim_thickness,
-            heatNumber: r.heat_number,
-            bundleNo: r.bundle_no,
-            brand: r.brand,
-            orderNo: r.order_no,
-            depoLocation: r.depo_location,
-            descriptionNotes: r.description_notes,
-        }));
+        if (hasLoadedInitialItems.current) {
+            console.log("❌ Already loaded initial items");
+            return;
+        }
 
-        setData(mapped);
+        if (isLoadingItems.current) {
+            console.log("❌ Already loading...");
+            return;
+        }
 
-        // لود کردن محصولات برای سطرهایی که دسته‌بندی دارند
-        mapped.forEach((r) => {
-            if (r.categoryId) {
-                loadProductsForCategory(r.categoryId);
+        isLoadingItems.current = true;
+        console.log("✅ Starting to load items...", initialItems);
+
+        const loadItemsWithCategories = async () => {
+            try {
+                const mapped = await Promise.all(
+                    initialItems.map(async (r, idx) => {
+                        let categoryId = r.category_id;
+
+                        console.log("🔍 RAW ITEM:", r);
+
+                        if (!categoryId && r.product_id) {
+                            try {
+                                const productRes = await get(`/products/${r.product_id}`);
+                                const product = productRes.data || productRes;
+                                categoryId = product.category_id;
+                                console.log(`📦 Product ${r.product_id} -> Category ${categoryId}`);
+                            } catch (err) {
+                                console.warn("Could not fetch product category:", err);
+                            }
+                        }
+
+                        console.log("🔍 MAPPED VALUES:", {
+                            count: r.count,
+                            fullWeight: r.weights_full,
+                            emptyWeight: r.weights_empty,
+                            originWeight: r.weights_origin,
+                            categoryId: categoryId,
+                        });
+
+                        return {
+                            id: idx + 1,
+                            realId: r.id,
+                            categoryId: categoryId,
+                            productId: r.product_id,
+                            nationalProductId: r.national_product_id,
+                            productDescription: r.product_description,
+                            count: r.count,
+                            unit: r.unit || "kg",
+                            productionType: r.production_type || "domestic",
+                            isUsed: Boolean(r.is_used),
+                            isDefective: Boolean(r.is_defective),
+                            fullWeight: r.weights_full,
+                            emptyWeight: r.weights_empty,
+                            netWeight: r.weights_net,
+                            originWeight: r.weights_origin,
+                            weightDiff: r.weights_diff,
+                            length: r.dim_length,
+                            width: r.dim_width,
+                            thickness: r.dim_thickness,
+                            heatNumber: r.heat_number,
+                            bundleNo: r.bundle_no,
+                            brand: r.brand,
+                            orderNo: r.order_no,
+                            depoLocation: r.depo_location,
+                            descriptionNotes: r.description_notes,
+                            rowCode: r.row_code,
+                            parentRow: r.parent_row,
+                        };
+                    })
+                );
+
+                console.log("✅ MAPPED ITEMS:", mapped);
+
+                hasLoadedInitialItems.current = true;
+                setData(mapped);
+
+                const uniqueCatIds = [...new Set(mapped.map((r) => r.categoryId).filter(Boolean))];
+                uniqueCatIds.forEach((catId) => loadProductsForCategory(catId));
+
+            } catch (error) {
+                console.error("❌ ERROR:", error);
+            } finally {
+                isLoadingItems.current = false;
             }
-        });
+        };
 
-        // ✅ علامت می‌زنیم که لود اولیه انجام شد تا دیگر لوپ تکرار نشود
-        isDataLoaded.current = true;
-
+        loadItemsWithCategories();
     }, [initialItems, loadProductsForCategory]);
 
-    /* --- خروجی --- */
+    /* ==========================================
+       ✅ خروجی - اصلاح شده
+    ========================================== */
     useEffect(() => {
         if (!onItemsChange) return;
+
+        if (data.length === 0 && !hasLoadedInitialItems.current) {
+            console.log("⏳ Skipping onItemsChange - still loading...");
+            return;
+        }
+
+        console.log("📤 Sending items to parent:", data.length);
+
         const mapped = data.map((r) => ({
             id: r.realId,
             owner_id: ownerId,
@@ -632,7 +604,6 @@ const loadProductsForCategory = useCallback(
         onItemsChange(mapped);
     }, [data, ownerId, onItemsChange]);
 
-    /* --- عملیات‌ها --- */
     const addRow = () =>
         setData((prev) => [
             ...prev,
@@ -671,18 +642,13 @@ const loadProductsForCategory = useCallback(
         [loadProductsForCategory]
     );
 
-    /* --- تغییر اندازه ستون --- */
     const handleColumnResize = useCallback((columnId, width) => {
         setSettings((prev) => ({
             ...prev,
-            columnWidths: {
-                ...prev.columnWidths,
-                [columnId]: width,
-            },
+            columnWidths: { ...prev.columnWidths, [columnId]: width },
         }));
     }, []);
 
-    /* --- Drag & Drop Handlers --- */
     const handleDragStart = (e, columnId) => {
         setDraggedColumn(columnId);
         e.dataTransfer.effectAllowed = "move";
@@ -692,34 +658,25 @@ const loadProductsForCategory = useCallback(
     const handleDragOver = (e, columnId) => {
         e.preventDefault();
         e.dataTransfer.dropEffect = "move";
-        if (columnId !== draggedColumn) {
-            setDragOverColumn(columnId);
-        }
+        if (columnId !== draggedColumn) setDragOverColumn(columnId);
     };
 
     const handleDrop = (e, targetColumnId) => {
         e.preventDefault();
         setDragOverColumn(null);
-
         if (draggedColumn && draggedColumn !== targetColumnId) {
             setSettings((prev) => {
                 const newOrder = [...prev.columnOrder];
                 const draggedIndex = newOrder.indexOf(draggedColumn);
                 const targetIndex = newOrder.indexOf(targetColumnId);
-
                 newOrder.splice(draggedIndex, 1);
                 newOrder.splice(targetIndex, 0, draggedColumn);
-
-                return {
-                    ...prev,
-                    columnOrder: newOrder,
-                };
+                return { ...prev, columnOrder: newOrder };
             });
         }
         setDraggedColumn(null);
     };
 
-    /* --- بازنشانی تنظیمات --- */
     const resetSettings = () => {
         const defaultSettings = {
             columnOrder: DEFAULT_COLUMN_ORDER,
@@ -730,32 +687,18 @@ const loadProductsForCategory = useCallback(
         saveSettings(defaultSettings);
     };
 
-    /* --- تعریف ستون‌ها --- */
     const allColumns = useMemo(
         () => ({
             actions: {
                 id: "actions",
                 header: () => (
-                    <Button
-                        color="success"
-                        size="sm"
-                        onClick={addRow}
-                        style={{
-                            ...styles.actionBtn,
-                            boxShadow: "0 2px 6px rgba(52, 195, 143, 0.4)",
-                        }}
-                    >
+                    <Button color="success" size="sm" onClick={addRow}
+                        style={{ ...styles.actionBtn, boxShadow: "0 2px 6px rgba(52, 195, 143, 0.4)" }}>
                         <i className="bx bx-plus"></i>
                     </Button>
                 ),
                 cell: ({ row }) => (
-                    <Button
-                        color="danger"
-                        size="sm"
-                        outline
-                        onClick={() => deleteRow(row.original.id)}
-                        style={styles.actionBtn}
-                    >
+                    <Button color="danger" size="sm" outline onClick={() => deleteRow(row.original.id)} style={styles.actionBtn}>
                         <i className="bx bx-trash-alt"></i>
                     </Button>
                 ),
@@ -765,14 +708,7 @@ const loadProductsForCategory = useCallback(
                 header: "#",
                 accessorKey: "id",
                 cell: ({ getValue }) => (
-                    <Badge
-                        color="light"
-                        style={{
-                            ...styles.badge,
-                            color: SKOTE_COLORS.primary,
-                            backgroundColor: "rgba(85, 110, 230, 0.1)",
-                        }}
-                    >
+                    <Badge color="light" style={{ ...styles.badge, color: SKOTE_COLORS.primary, backgroundColor: "rgba(85, 110, 230, 0.1)" }}>
                         {getValue()}
                     </Badge>
                 ),
@@ -787,16 +723,10 @@ const loadProductsForCategory = useCallback(
                 id: "categoryId",
                 header: COLUMN_LABELS.categoryId,
                 cell: ({ row }) => (
-                    <select
-                        className="form-select form-select-sm"
-                        value={row.original.categoryId || ""}
-                        onChange={(e) => updateData(row.index, "categoryId", e.target.value)}
-                        style={styles.select}
-                    >
+                    <select className="form-select form-select-sm" value={row.original.categoryId || ""}
+                        onChange={(e) => updateData(row.index, "categoryId", e.target.value)} style={styles.select}>
                         <option value="">انتخاب...</option>
-                        {categories.map((c) => (
-                            <option key={c.id} value={c.id}>{c.name}</option>
-                        ))}
+                        {categories.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
                     </select>
                 ),
             },
@@ -804,16 +734,10 @@ const loadProductsForCategory = useCallback(
                 id: "productId",
                 header: COLUMN_LABELS.productId,
                 cell: ({ row }) => (
-                    <select
-                        className="form-select form-select-sm"
-                        value={row.original.productId || ""}
-                        onChange={(e) => updateData(row.index, "productId", e.target.value)}
-                        style={styles.select}
-                    >
+                    <select className="form-select form-select-sm" value={row.original.productId || ""}
+                        onChange={(e) => updateData(row.index, "productId", e.target.value)} style={styles.select}>
                         <option value="">انتخاب...</option>
-                        {(productsByCat[row.original.categoryId] || []).map((p) => (
-                            <option key={p.id} value={p.id}>{p.name}</option>
-                        ))}
+                        {(productsByCat[row.original.categoryId] || []).map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
                     </select>
                 ),
             },
@@ -827,12 +751,8 @@ const loadProductsForCategory = useCallback(
                 id: "productionType",
                 header: COLUMN_LABELS.productionType,
                 cell: ({ row }) => (
-                    <select
-                        className="form-select form-select-sm"
-                        value={row.original.productionType || "domestic"}
-                        onChange={(e) => updateData(row.index, "productionType", e.target.value)}
-                        style={styles.select}
-                    >
+                    <select className="form-select form-select-sm" value={row.original.productionType || "domestic"}
+                        onChange={(e) => updateData(row.index, "productionType", e.target.value)} style={styles.select}>
                         <option value="domestic">داخلی</option>
                         <option value="import">وارداتی</option>
                     </select>
@@ -848,12 +768,8 @@ const loadProductsForCategory = useCallback(
                 id: "unit",
                 header: COLUMN_LABELS.unit,
                 cell: ({ row }) => (
-                    <select
-                        className="form-select form-select-sm"
-                        value={row.original.unit || "kg"}
-                        onChange={(e) => updateData(row.index, "unit", e.target.value)}
-                        style={styles.select}
-                    >
+                    <select className="form-select form-select-sm" value={row.original.unit || "kg"}
+                        onChange={(e) => updateData(row.index, "unit", e.target.value)} style={styles.select}>
                         <option value="kg">کیلو</option>
                         <option value="ton">تن</option>
                         <option value="pcs">عدد</option>
@@ -892,14 +808,7 @@ const loadProductsForCategory = useCallback(
                 header: COLUMN_LABELS.weightDiff,
                 cell: ({ row }) => {
                     const v = Number(row.original.weightDiff || 0);
-                    return (
-                        <Badge
-                            color={v > 0 ? "success" : v < 0 ? "danger" : "secondary"}
-                            style={styles.badge}
-                        >
-                            {v > 0 ? "+" : ""}{v.toLocaleString()}
-                        </Badge>
-                    );
+                    return <Badge color={v > 0 ? "success" : v < 0 ? "danger" : "secondary"} style={styles.badge}>{v > 0 ? "+" : ""}{v.toLocaleString()}</Badge>;
                 },
             },
             isUsed: {
@@ -907,13 +816,8 @@ const loadProductsForCategory = useCallback(
                 header: COLUMN_LABELS.isUsed,
                 cell: ({ row }) => (
                     <div className="form-check d-flex justify-content-center">
-                        <input
-                            type="checkbox"
-                            className="form-check-input"
-                            checked={row.original.isUsed || false}
-                            onChange={(e) => updateData(row.index, "isUsed", e.target.checked)}
-                            style={{ width: "18px", height: "18px", cursor: "pointer" }}
-                        />
+                        <input type="checkbox" className="form-check-input" checked={row.original.isUsed || false}
+                            onChange={(e) => updateData(row.index, "isUsed", e.target.checked)} style={{ width: "18px", height: "18px", cursor: "pointer" }} />
                     </div>
                 ),
             },
@@ -922,13 +826,8 @@ const loadProductsForCategory = useCallback(
                 header: COLUMN_LABELS.isDefective,
                 cell: ({ row }) => (
                     <div className="form-check d-flex justify-content-center">
-                        <input
-                            type="checkbox"
-                            className="form-check-input"
-                            checked={row.original.isDefective || false}
-                            onChange={(e) => updateData(row.index, "isDefective", e.target.checked)}
-                            style={{ width: "18px", height: "18px", cursor: "pointer" }}
-                        />
+                        <input type="checkbox" className="form-check-input" checked={row.original.isDefective || false}
+                            onChange={(e) => updateData(row.index, "isDefective", e.target.checked)} style={{ width: "18px", height: "18px", cursor: "pointer" }} />
                     </div>
                 ),
             },
@@ -1002,7 +901,6 @@ const loadProductsForCategory = useCallback(
         [categories, productsByCat, updateData]
     );
 
-    // ستون‌های مرتب‌شده و قابل نمایش
     const visibleColumnIds = useMemo(
         () => columnOrder.filter((id) => columnVisibility[id] !== false),
         [columnOrder, columnVisibility]
@@ -1022,7 +920,6 @@ const loadProductsForCategory = useCallback(
 
     return (
         <Card style={styles.card}>
-            {/* هدر */}
             <CardHeader style={styles.cardHeader}>
                 <Row className="align-items-center">
                     <Col>
@@ -1033,34 +930,13 @@ const loadProductsForCategory = useCallback(
                     </Col>
                     <Col xs="auto">
                         <div className="d-flex gap-2">
-                            <Button
-                                color="light"
-                                size="sm"
-                                onClick={resetSettings}
-                                style={{
-                                    ...styles.actionBtn,
-                                    backgroundColor: "rgba(255,255,255,0.2)",
-                                    border: "none",
-                                    color: "#fff",
-                                }}
-                                title="بازنشانی تنظیمات"
-                            >
-                                <i className="bx bx-reset me-1"></i>
-                                بازنشانی
+                            <Button color="light" size="sm" onClick={resetSettings}
+                                style={{ ...styles.actionBtn, backgroundColor: "rgba(255,255,255,0.2)", border: "none", color: "#fff" }} title="بازنشانی تنظیمات">
+                                <i className="bx bx-reset me-1"></i>بازنشانی
                             </Button>
-                            <Button
-                                color="light"
-                                size="sm"
-                                onClick={() => setShowColumnModal(true)}
-                                style={{
-                                    ...styles.actionBtn,
-                                    backgroundColor: "rgba(255,255,255,0.2)",
-                                    border: "none",
-                                    color: "#fff",
-                                }}
-                            >
-                                <i className="bx bx-cog me-1"></i>
-                                ستون‌ها
+                            <Button color="light" size="sm" onClick={() => setShowColumnModal(true)}
+                                style={{ ...styles.actionBtn, backgroundColor: "rgba(255,255,255,0.2)", border: "none", color: "#fff" }}>
+                                <i className="bx bx-cog me-1"></i>ستون‌ها
                             </Button>
                         </div>
                     </Col>
@@ -1068,173 +944,88 @@ const loadProductsForCategory = useCallback(
             </CardHeader>
 
             <CardBody style={{ padding: "1.25rem" }}>
-                {/* آمار */}
                 <Row className="mb-3 g-3">
                     <Col md={4}>
-                        <StatCard
-                            icon="bx bx-box"
-                            label="تعداد ردیف"
-                            value={summary.items.toLocaleString("fa-IR")}
-                            color={SKOTE_COLORS.primary}
-                            bgColor="rgba(85, 110, 230, 0.1)"
-                        />
+                        <StatCard icon="bx bx-box" label="تعداد ردیف" value={summary.items.toLocaleString("fa-IR")}
+                            color={SKOTE_COLORS.primary} bgColor="rgba(85, 110, 230, 0.1)" />
                     </Col>
                     <Col md={4}>
-                        <StatCard
-                            icon="bx bx-layer"
-                            label="جمع تعداد"
-                            value={summary.count.toLocaleString("fa-IR")}
-                            color={SKOTE_COLORS.success}
-                            bgColor="rgba(52, 195, 143, 0.1)"
-                        />
+                        <StatCard icon="bx bx-layer" label="جمع تعداد" value={summary.count.toLocaleString("fa-IR")}
+                            color={SKOTE_COLORS.success} bgColor="rgba(52, 195, 143, 0.1)" />
                     </Col>
                     <Col md={4}>
-                        <StatCard
-                            icon="bx bx-cylinder"
-                            label="وزن خالص کل"
-                            value={`${summary.netWeight.toLocaleString("fa-IR")} کیلو`}
-                            color={SKOTE_COLORS.info}
-                            bgColor="rgba(80, 165, 241, 0.1)"
-                        />
+                        <StatCard icon="bx bx-cylinder" label="وزن خالص کل" value={`${summary.netWeight.toLocaleString("fa-IR")} کیلو`}
+                            color={SKOTE_COLORS.info} bgColor="rgba(80, 165, 241, 0.1)" />
                     </Col>
                 </Row>
 
-                {/* راهنما */}
-                <div
-                    className="alert d-flex align-items-center mb-3"
-                    style={{
-                        fontSize: "0.8rem",
-                        padding: "0.5rem 1rem",
-                        backgroundColor: "rgba(80, 165, 241, 0.1)",
-                        border: "none",
-                        color: SKOTE_COLORS.info,
-                        borderRadius: "0.25rem",
-                    }}
-                >
+                <div className="alert d-flex align-items-center mb-3"
+                    style={{ fontSize: "0.8rem", padding: "0.5rem 1rem", backgroundColor: "rgba(80, 165, 241, 0.1)", border: "none", color: SKOTE_COLORS.info, borderRadius: "0.25rem" }}>
                     <i className="bx bx-info-circle me-2"></i>
-                    برای جابجایی ستون‌ها، هدر را بکشید. برای تغییر اندازه، لبه چپ هدر را بکشید. تنظیمات خودکار ذخیره می‌شود.
+                    برای جابجایی ستون‌ها، هدر را بکشید. برای تغییر اندازه، لبه چپ هدر را بکشید.
                 </div>
 
-                {/* جدول */}
                 <div style={styles.tableWrapper}>
-                    <Table
-                        hover
-                        responsive
-                        className="table-nowrap mb-0 align-middle"
-                        style={styles.table}
-                    >
+                    <Table hover responsive className="table-nowrap mb-0 align-middle" style={styles.table}>
                         <thead style={styles.tableHead}>
-                        <tr>
-                            {visibleColumnIds.map((columnId) => {
-                                const col = allColumns[columnId];
-                                return (
-                                    <DraggableHeader
-                                        key={columnId}
-                                        columnId={columnId}
-                                        columnWidth={columnWidths[columnId] || 100}
-                                        onResize={handleColumnResize}
-                                        onDragStart={handleDragStart}
-                                        onDragOver={handleDragOver}
-                                        onDrop={handleDrop}
-                                        isDragging={draggedColumn === columnId}
-                                        isDragOver={dragOverColumn === columnId}
-                                    >
-                                        {typeof col.header === "function" ? col.header() : col.header}
-                                    </DraggableHeader>
-                                );
-                            })}
-                        </tr>
+                            <tr>
+                                {visibleColumnIds.map((columnId) => {
+                                    const col = allColumns[columnId];
+                                    return (
+                                        <DraggableHeader key={columnId} columnId={columnId} columnWidth={columnWidths[columnId] || 100}
+                                            onResize={handleColumnResize} onDragStart={handleDragStart} onDragOver={handleDragOver}
+                                            onDrop={handleDrop} isDragging={draggedColumn === columnId} isDragOver={dragOverColumn === columnId}>
+                                            {typeof col.header === "function" ? col.header() : col.header}
+                                        </DraggableHeader>
+                                    );
+                                })}
+                            </tr>
                         </thead>
                         <tbody>
-                        {table.getRowModel().rows.map((row) => (
-                            <tr
-                                key={row.id}
-                                onMouseEnter={() => setHoveredRow(row.id)}
-                                onMouseLeave={() => setHoveredRow(null)}
-                                style={{
-                                    backgroundColor:
-                                        hoveredRow === row.id ? SKOTE_COLORS.tableHover : "transparent",
-                                    transition: "background-color 0.15s ease",
-                                }}
-                            >
-                                {row.getVisibleCells().map((cell) => (
-                                    <td
-                                        key={cell.id}
-                                        style={{
-                                            ...styles.td,
-                                            width: columnWidths[cell.column.id] || 100,
-                                            minWidth: columnWidths[cell.column.id] || 100,
-                                            maxWidth: columnWidths[cell.column.id] || 100,
-                                        }}
-                                    >
-                                        {flexRender(cell.column.columnDef.cell, cell.getContext())}
-                                    </td>
-                                ))}
-                            </tr>
-                        ))}
+                            {table.getRowModel().rows.map((row) => (
+                                <tr key={row.id} onMouseEnter={() => setHoveredRow(row.id)} onMouseLeave={() => setHoveredRow(null)}
+                                    style={{ backgroundColor: hoveredRow === row.id ? SKOTE_COLORS.tableHover : "transparent", transition: "background-color 0.15s ease" }}>
+                                    {row.getVisibleCells().map((cell) => (
+                                        <td key={cell.id} style={{ ...styles.td, width: columnWidths[cell.column.id] || 100, minWidth: columnWidths[cell.column.id] || 100, maxWidth: columnWidths[cell.column.id] || 100 }}>
+                                            {flexRender(cell.column.columnDef.cell, cell.getContext())}
+                                        </td>
+                                    ))}
+                                </tr>
+                            ))}
                         </tbody>
-
                         {data.length > 0 && (
                             <tfoot>
-                            <tr style={styles.summaryRow}>
-                                <td
-                                    colSpan={columns.length - 3}
-                                    style={{ ...styles.td, textAlign: "left", paddingRight: "1rem" }}
-                                >
-                                    <strong>
-                                        <i className="bx bx-calculator me-2"></i>
-                                        جمع کل
-                                    </strong>
-                                </td>
-                                <td style={{ ...styles.td, textAlign: "center" }}>
-                                    <Badge color="success" style={{ ...styles.badge, fontSize: "0.85rem" }}>
-                                        {summary.count.toLocaleString("fa-IR")}
-                                    </Badge>
-                                </td>
-                                <td style={styles.td}></td>
-                                <td colSpan={2} style={{ ...styles.td, textAlign: "center" }}>
-                                    <Badge color="primary" style={{ ...styles.badge, fontSize: "0.85rem" }}>
-                                        {summary.netWeight.toLocaleString("fa-IR")} کیلو
-                                    </Badge>
-                                </td>
-                            </tr>
+                                <tr style={styles.summaryRow}>
+                                    <td colSpan={columns.length - 3} style={{ ...styles.td, textAlign: "left", paddingRight: "1rem" }}>
+                                        <strong><i className="bx bx-calculator me-2"></i>جمع کل</strong>
+                                    </td>
+                                    <td style={{ ...styles.td, textAlign: "center" }}>
+                                        <Badge color="success" style={{ ...styles.badge, fontSize: "0.85rem" }}>{summary.count.toLocaleString("fa-IR")}</Badge>
+                                    </td>
+                                    <td style={styles.td}></td>
+                                    <td colSpan={2} style={{ ...styles.td, textAlign: "center" }}>
+                                        <Badge color="primary" style={{ ...styles.badge, fontSize: "0.85rem" }}>{summary.netWeight.toLocaleString("fa-IR")} کیلو</Badge>
+                                    </td>
+                                </tr>
                             </tfoot>
                         )}
                     </Table>
                 </div>
 
-                {/* حالت خالی */}
                 {data.length === 0 && (
                     <div className="text-center py-5" style={{ color: SKOTE_COLORS.muted }}>
                         <i className="bx bx-inbox" style={{ fontSize: "3rem", opacity: 0.5 }}></i>
                         <p className="mt-2 mb-0">هیچ کالایی اضافه نشده است</p>
-                        <Button
-                            color="primary"
-                            size="sm"
-                            onClick={addRow}
-                            className="mt-3"
-                            style={{ ...styles.actionBtn, padding: "0.5rem 1.5rem" }}
-                        >
-                            <i className="bx bx-plus me-1"></i>
-                            افزودن اولین کالا
+                        <Button color="primary" size="sm" onClick={addRow} className="mt-3" style={{ ...styles.actionBtn, padding: "0.5rem 1.5rem" }}>
+                            <i className="bx bx-plus me-1"></i>افزودن اولین کالا
                         </Button>
                     </div>
                 )}
             </CardBody>
 
-            {/* مودال مدیریت ستون‌ها */}
-            <ColumnManagerModal
-                isOpen={showColumnModal}
-                toggle={() => setShowColumnModal(false)}
-                columnVisibility={columnVisibility}
-                columnLabels={COLUMN_LABELS}
-                onToggleColumn={(vis) => {
-                    setSettings((prev) => ({
-                        ...prev,
-                        columnVisibility: vis,
-                    }));
-                }}
-            />
+            <ColumnManagerModal isOpen={showColumnModal} toggle={() => setShowColumnModal(false)}
+                columnVisibility={columnVisibility} columnLabels={COLUMN_LABELS}
+                onToggleColumn={(vis) => setSettings((prev) => ({ ...prev, columnVisibility: vis }))} />
         </Card>
     );
 };
