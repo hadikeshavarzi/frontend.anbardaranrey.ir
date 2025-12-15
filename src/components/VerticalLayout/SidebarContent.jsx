@@ -233,7 +233,7 @@ const SidebarContent = () => {
                 <span>ترخیص کالا</span>
               </Link>
               <ul className="sub-menu">
-                <li><Link to="/clearances/add">ثبت ترخیص جدید</Link></li>
+                <li><Link to="/clearances/form">ثبت ترخیص جدید</Link></li>
                 <li><Link to="/clearances/list">لیست ترخیص‌ها</Link></li>
               </ul>
             </li>

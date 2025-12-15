@@ -35,7 +35,8 @@ import ReceiptForm from "../pages/Receipt/ReceiptForm";
 import ReceiptsList from "../pages/Receipt/ReceiptsList"; 
 
 /* Clearance */
-import ClearancesAdd from "../pages/Clearance/ClearancesAdd";
+import Clearancesform from "../pages/Clearance/ClearanceForm";  
+
 
 /* Auth */
 import Login from "../pages/Authentication/Login";
@@ -92,7 +93,7 @@ const authProtectedRoutes = [
   /* ========================================================== */
 
   /* Clearance */
-  { path: "/clearances/add", component: <ClearancesAdd /> },
+  { path: "/clearances/form", component: <Clearancesform /> },
 
   /* Default Redirect */
   { path: "/", exact: true, component: <Navigate to="/dashboard" /> },
