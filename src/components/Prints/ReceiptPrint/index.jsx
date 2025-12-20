@@ -1,5 +1,5 @@
 import React, { useMemo } from "react";
-import "../print-styles.css";
+import "./print-styles.css";
 
 const ReceiptPrintTemplate = ({ form, receiptNo }) => {
   if (!form || !form.items) return null;

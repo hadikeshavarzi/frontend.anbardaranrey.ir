@@ -135,138 +135,118 @@ const SidebarContent = () => {
   }
 
   return (
-    <React.Fragment>
-      <SimpleBar className="h-100" ref={ref}>
-        <div id="sidebar-menu">
-          <ul className="metismenu list-unstyled" id="side-menu">
+      <React.Fragment>
+        <SimpleBar className="h-100" ref={ref}>
+          <div id="sidebar-menu">
+            <ul className="metismenu list-unstyled" id="side-menu">
 
-            {/* داشبورد */}
-            <li className="menu-title">داشبورد</li>
-            <li>
-              <Link to="/dashboard">
-                <i className="bx bx-home-circle"></i>
-                <span>صفحه اصلی</span>
-              </Link>
-            </li>
+              <li className="menu-title">داشبورد</li>
+              <li>
+                <Link to="/dashboard">
+                  <i className="bx bx-home-circle"></i>
+                  <span>صفحه اصلی</span>
+                </Link>
+              </li>
 
-            {/* مدیریت اعضا */}
-            <li className="menu-title">مدیریت اعضا</li>
+              <li className="menu-title">مدیریت اعضا</li>
+              <li>
+                <Link to="/#" className="has-arrow">
+                  <i className="bx bx-user"></i>
+                  <span>اعضا</span>
+                </Link>
+                <ul className="sub-menu">
+                  <li><Link to="/members/add">ثبت عضو</Link></li>
+                  <li><Link to="/members/list">لیست اعضا</Link></li>
+                </ul>
+              </li>
 
-            <li>
-              <Link to="/#" className="has-arrow">
-                <i className="bx bx-user"></i>
-                <span>اعضا</span>
-              </Link>
-              <ul className="sub-menu">
-                <li><Link to="/members/add">ثبت عضو</Link></li>
-                <li><Link to="/members/list">لیست اعضا</Link></li>
-              </ul>
-            </li>
+              <li className="menu-title">انبارداری</li>
 
-            {/* انبارداری */}
-            <li className="menu-title">انبارداری</li>
+              <li>
+                <Link to="/#" className="has-arrow">
+                  <i className="bx bx-id-card"></i>
+                  <span>مشتریان</span>
+                </Link>
+                <ul className="sub-menu">
+                  <li><Link to="/customers/add">ثبت مشتری</Link></li>
+                  <li><Link to="/customers/list">لیست مشتریان</Link></li>
+                </ul>
+              </li>
 
-            {/* مشتریان */}
-            <li>
-              <Link to="/#" className="has-arrow">
-                <i className="bx bx-id-card"></i>
-                <span>مشتریان</span>
-              </Link>
-              <ul className="sub-menu">
-                <li><Link to="/customers/add">ثبت مشتری</Link></li>
-                <li><Link to="/customers/list">لیست مشتریان</Link></li>
-              </ul>
-            </li>
+              <li>
+                <Link to="/#" className="has-arrow">
+                  <i className="bx bx-package"></i>
+                  <span>کالاها و دسته‌بندی</span>
+                </Link>
+                <ul className="sub-menu">
+                  <li><Link to="/inventory/add-product">ثبت کالا</Link></li>
+                  <li><Link to="/inventory/product-list">لیست کالاها</Link></li>
+                  <li><Link to="/inventory/category-list">دسته‌بندی‌ها</Link></li>
+                </ul>
+              </li>
 
-            {/* واحدهای کالا */}
-            <li>
-              <Link to="/#" className="has-arrow">
-                <i className="bx bx-layer"></i>
-                <span>واحد کالا</span>
-              </Link>
-              <ul className="sub-menu">
-                <li><Link to="/inventory/add-unit">ثبت واحد</Link></li>
-                <li><Link to="/inventory/unit-list">لیست واحدها</Link></li>
-              </ul>
-            </li>
+              <li className="menu-title">عملیات انبار</li>
 
-            {/* دسته بندی کالا */}
-            <li>
-              <Link to="/#" className="has-arrow">
-                <i className="bx bx-category"></i>
-                <span>دسته‌بندی کالا</span>
-              </Link>
-              <ul className="sub-menu">
-                <li><Link to="/inventory/add-category">ثبت دسته‌بندی</Link></li>
-                <li><Link to="/inventory/category-list">لیست دسته‌بندی</Link></li>
-              </ul>
-            </li>
+              {/* رسید کالا */}
+              <li>
+                <Link to="/#" className="has-arrow">
+                  <i className="bx bx-file"></i>
+                  <span>رسید کالا</span>
+                </Link>
+                <ul className="sub-menu">
+                  <li><Link to="/receipt/form">ثبت رسید جدید</Link></li>
+                  <li><Link to="/receipt/list">لیست رسیدها</Link></li>
+                </ul>
+              </li>
 
-            {/* کالاها */}
-            <li>
-              <Link to="/#" className="has-arrow">
-                <i className="bx bx-package"></i>
-                <span>کالاها</span>
-              </Link>
-              <ul className="sub-menu">
-                <li><Link to="/inventory/add-product">ثبت کالا</Link></li>
-                <li><Link to="/inventory/product-list">لیست کالاها</Link></li>
-              </ul>
-            </li>
+              {/* ترخیص کالا */}
+              <li>
+                <Link to="/#" className="has-arrow">
+                  <i className="bx bx-export"></i>
+                  <span>ترخیص کالا</span>
+                </Link>
+                <ul className="sub-menu">
+                  <li><Link to="/clearances/form">ثبت ترخیص جدید</Link></li>
+                  <li><Link to="/clearances/report">گزارش ترخیص‌ها</Link></li>
+                </ul>
+              </li>
 
-            {/* رسید کالا */}
-            <li>
-              <Link to="/#" className="has-arrow">
-                <i className="bx bx-file"></i>
-                <span>رسید کالا</span>
-              </Link>
-              <ul className="sub-menu">
-                <li><Link to="/receipt/form">ثبت رسید جدید</Link></li>
-                <li><Link to="/receipt/list">لیست رسیدها</Link></li>
-              </ul>
-            </li>
+              {/* بارگیری کالا */}
+              <li>
+                <Link to="/#" className="has-arrow">
+                  <i className="bx bx-truck"></i>
+                  <span>بارگیری کالا</span>
+                </Link>
+                <ul className="sub-menu">
+                  <li><Link to="/loading/create">صدور دستور بارگیری</Link></li>
+                  <li><Link to="/loading/list">لیست دستورها</Link></li>
+                </ul>
+              </li>
 
-            {/* ترخیص کالا */}
-            <li>
-              <Link to="/#" className="has-arrow">
-                <i className="bx bx-export"></i>
-                <span>ترخیص کالا</span>
-              </Link>
-              <ul className="sub-menu">
-                <li><Link to="/clearances/form">ثبت ترخیص جدید</Link></li>
-                <li><Link to="/clearances/list">لیست ترخیص‌ها</Link></li>
-              </ul>
-            </li>
+              {/* ✅ منوی جدید: خروج و باسکول */}
+              <li>
+                <Link to="/#" className="has-arrow">
+                  <i className="bx bx-door-open"></i>
+                  <span>خروج کالا (باسکول)</span>
+                </Link>
+                <ul className="sub-menu">
+                  <li><Link to="/exit/create">ثبت خروج و توزین</Link></li>
+                  <li><Link to="/exit/list">لیست خروج‌ها</Link></li>
+                </ul>
+              </li>
 
-            {/* گزارشات */}
-            <li className="menu-title">گزارشات</li>
-            <li>
-              <Link to="/reports/stock-report">
-                <i className="bx bx-bar-chart-alt-2"></i>
-                <span>گزارش موجودی</span>
-              </Link>
-            </li>
+              <li className="menu-title">تنظیمات</li>
+              <li>
+                <Link to="/settings">
+                  <i className="bx bx-cog"></i>
+                  <span>تنظیمات سیستم</span>
+                </Link>
+              </li>
 
-            {/* تنظیمات */}
-            <li className="menu-title">تنظیمات</li>
-            <li>
-              <Link to="/settings">
-                <i className="bx bx-cog"></i>
-                <span>تنظیمات سیستم</span>
-              </Link>
-            </li>
-
-            <li>
-              <Link to="/profile">
-                <i className="bx bx-user-circle"></i>
-                <span>پروفایل</span>
-              </Link>
-            </li>
-
-          </ul>
-        </div>
-      </SimpleBar>
-    </React.Fragment>
+            </ul>
+          </div>
+        </SimpleBar>
+      </React.Fragment>
   );
 };
 

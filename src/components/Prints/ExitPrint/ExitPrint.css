@@ -1,0 +1,89 @@
+/* ExitPrint.css */
+
+/* --- حالت نمایش در مانیتور --- */
+.exit-print-master {
+    background-color: #f0f2f5;
+    min-height: 100vh;
+    padding: 30px 0;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: flex-start;
+}
+
+.exit-print-container {
+    width: 210mm; /* عرض A4 */
+    min-height: 297mm; /* ارتفاع A4 */
+    background: white;
+    padding: 10mm 15mm;
+    margin-bottom: 30px;
+    box-shadow: 0 4px 20px rgba(0,0,0,0.08);
+    position: relative;
+    color: #000; /* اجبار رنگ مشکی */
+}
+
+/* دکمه‌های بالای صفحه */
+.print-actions {
+    width: 210mm;
+    display: flex;
+    justify-content: space-between;
+    margin-bottom: 15px;
+}
+
+/* --- تنظیمات حیاتی پرینت --- */
+@media print {
+    /* 1. مخفی کردن همه چیز در کل صفحه */
+    body * {
+        visibility: hidden;
+    }
+
+    /* 2. ظاهر کردن فاکتور و محتویات داخلش */
+    .exit-print-master, .exit-print-master * {
+        visibility: visible;
+    }
+
+    /* 3. تکنیک مهم: جدا کردن فاکتور از جریان صفحه */
+    .exit-print-master {
+        position: fixed; /* فیکس کردن روی صفحه */
+        left: 0;
+        top: 0;
+        width: 100%;
+        height: 100%;
+        margin: 0;
+        padding: 0;
+        background: white;
+        z-index: 9999; /* اولویت نمایش بالاتر از همه */
+        overflow: visible;
+    }
+
+    /* 4. تنظیم کانتینر برای کاغذ */
+    .exit-print-container {
+        width: 100% !important;
+        box-shadow: none !important;
+        margin: 0 !important;
+        padding: 5mm 10mm !important; /* کمی فاصله از لبه کاغذ */
+        border: none !important;
+        page-break-after: always;
+    }
+
+    /* 5. مخفی کردن دکمه‌ها در چاپ */
+    .print-actions {
+        display: none !important;
+    }
+
+    /* 6. اجبار چاپ رنگ‌های پس‌زمینه (برای جداول) */
+    * {
+        -webkit-print-color-adjust: exact !important;
+        print-color-adjust: exact !important;
+    }
+}
+
+/* استایل‌های داخلی فاکتور */
+.table th {
+    background-color: #e9ecef !important;
+    color: #000 !important;
+}
+
+.border-dotted {
+    border-bottom: 1px dotted #000;
+}

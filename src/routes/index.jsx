@@ -29,16 +29,24 @@ import EditCustomer from "../pages/Customers/EditCustomer";
 
 /* Receipt */
 import ReceiptForm from "../pages/Receipt/ReceiptForm";
+import ReceiptsList from "../pages/Receipt/ReceiptsList";
 
-// ✅ اصلاح شد: نام فایل احتمالا ReceiptsList.jsx است (با s)
-// همچنین متغیر را ReceiptsList نامیدیم تا با پایین کد هماهنگ باشد
-import ReceiptsList from "../pages/Receipt/ReceiptsList"; 
+/* Clearance (ترخیص) */
+import Clearancesform from "../pages/Clearance/ClearanceForm";
+import ClearanceReport from "../pages/Clearance/ClearanceReport";
+import ClearanceEdit from "../pages/Clearance/ClearanceEdit";
 
-/* Clearance */
-import Clearancesform from "../pages/Clearance/ClearanceForm";  
+/* Loading (بارگیری) */
+import LoadingOrderForm from "../pages/Loading/LoadingOrderForm";
+import LoadingList from "../pages/Loading/LoadingList";
+import LoadingPrint from "../pages/Loading/LoadingPrint";
 
+/* ✅ Exit (خروج و باسکول - جدید) */
+import ExitList from "../pages/Exit/ExitList"; // <--- اضافه شد
+import ExitCreate from "../pages/Exit/ExitCreate";
+import ExitPrint from "../components/Prints/ExitPrint";
 
-/* Auth */
+/* Authentication */
 import Login from "../pages/Authentication/Login";
 import Register from "../pages/Authentication/Register";
 import Logout from "../pages/Authentication/Logout";
@@ -73,27 +81,27 @@ const authProtectedRoutes = [
   { path: "/inventory/add-product", component: <AddProduct /> },
   { path: "/inventory/edit-product/:id", component: <EditProduct /> },
 
-  /* ================= Receipt Routes (Fixed) ================= */
-  
-  // 1. لیست اصلی رسیدها
-  // ✅ الان کامپوننت ReceiptsList از ایمپورت بالا خوانده می‌شود
+  /* ================= Receipt Routes ================= */
   { path: "/receipts", component: <ReceiptsList /> },
-
-  // 2. ثبت رسید جدید
   { path: "/receipt/form", component: <ReceiptForm mode="create" /> },
-
-  // 3. ویرایش رسید
   { path: "/receipt/form/edit/:id", component: <ReceiptForm mode="edit" /> },
-
-  // 4. مشاهده رسید (فقط خواندنی)
   { path: "/receipt/view/:id", component: <ReceiptForm mode="view" /> },
-
-  // * ریدایرکت لینک قدیمی به جدید
   { path: "/receipt/list", component: <Navigate to="/receipts" /> },
-  /* ========================================================== */
 
-  /* Clearance */
+  /* ================= Clearance Routes (ترخیص) ================= */
   { path: "/clearances/form", component: <Clearancesform /> },
+  { path: "/clearances/report", component: <ClearanceReport /> },
+  { path: "/clearances/edit/:id", component: <ClearanceEdit /> },
+
+  /* ================= Loading Routes (بارگیری) ================= */
+  { path: "/loading/create", component: <LoadingOrderForm /> },
+  { path: "/loading/list", component: <LoadingList /> },
+  { path: "/loading/print/:id", component: <LoadingPrint /> },
+
+  /* ================= ✅ Exit Routes (خروج و باسکول) ================= */
+  { path: "/exit/list", component: <ExitList /> }, // <--- مسیر لیست اضافه شد
+  { path: "/exit/create", component: <ExitCreate /> },
+  { path: "/exit/print/:id", component: <ExitPrint /> },
 
   /* Default Redirect */
   { path: "/", exact: true, component: <Navigate to="/dashboard" /> },

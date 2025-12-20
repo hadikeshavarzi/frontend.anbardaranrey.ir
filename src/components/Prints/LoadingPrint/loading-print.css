@@ -1,0 +1,105 @@
+/* src/components/Prints/LoadingPrint/loading-print.css */
+
+@import url('https://cdn.jsdelivr.net/gh/rastikerdar/vazir-font/dist/font-face.css');
+
+/* --------------------------------------------------------
+   حالت عادی (مانیتور): مخفی کردن کامل از دید کاربر
+   -------------------------------------------------------- */
+#loading-print-section {
+    display: none; /* در حالت عادی اصلا رندر نشود بهتر است */
+}
+
+/* اما چون ریکت پورتال استفاده کردیم، برای اطمینان این را هم اضافه میکنیم
+   که اگر display: block خورد، باز هم دیده نشود تا زمان پرینت */
+body.printing #loading-print-section {
+    display: block;
+}
+
+/* --------------------------------------------------------
+   حالت پرینت (Print) - استایل‌های حیاتی
+   -------------------------------------------------------- */
+@media print {
+    /* 1. مخفی کردن کل اپلیکیشن (خیلی مهم) */
+    #root, .layout-wrapper, .main-content, .page-content {
+        display: none !important;
+        height: 0 !important;
+        overflow: hidden !important;
+    }
+
+    /* 2. تنظیمات بادی */
+    body {
+        background-color: #fff !important;
+        padding: 0 !important;
+        margin: 0 !important;
+        height: 100%;
+        width: 100%;
+        overflow: visible !important;
+    }
+
+    /* 3. نمایش بخش پرینت */
+    #loading-print-section {
+        display: block !important;
+        position: absolute !important;
+        top: 0 !important;
+        left: 0 !important;
+        width: 100% !important;
+        height: auto !important;
+        margin: 0 !important;
+        padding: 10mm !important; /* حاشیه کاغذ */
+        z-index: 9999999 !important;
+        background-color: white !important;
+        visibility: visible !important;
+        opacity: 1 !important;
+    }
+
+    /* اطمینان از دیده شدن همه فرزندان */
+    #loading-print-section * {
+        visibility: visible !important;
+        -webkit-print-color-adjust: exact !important;
+        print-color-adjust: exact !important;
+    }
+}
+
+/* --------------------------------------------------------
+   استایل‌های داخلی فرم (Loading Styles)
+   -------------------------------------------------------- */
+.loading-wrapper {
+    direction: rtl;
+    font-family: 'Vazir', 'Tahoma', sans-serif;
+    font-size: 10pt;
+    color: #000;
+    line-height: 1.5;
+}
+
+/* هدر */
+.loading-header { display: flex; justify-content: space-between; margin-bottom: 20px; border-bottom: 2px solid #000; padding-bottom: 10px; }
+.lh-side { width: 30%; }
+.lh-center { width: 40%; text-align: center; }
+.lh-title { font-size: 20pt; font-weight: 900; margin: 0; color: #333; }
+.lh-doc-name { border: 1px solid #000; padding: 5px 15px; border-radius: 5px; font-weight: bold; display: inline-block; margin-top: 5px; font-size: 12pt; background: #f0f0f0; }
+
+.l-box { border: 1px solid #000; border-radius: 5px; overflow: hidden; margin-bottom: 12px; }
+.l-box-header { background-color: #ddd !important; border-bottom: 1px solid #000; padding: 5px; text-align: center; font-weight: bold; font-size: 9pt; }
+.l-box-content { padding: 8px; font-size: 10pt; }
+
+.l-row { display: flex; flex-wrap: wrap; }
+.l-item { margin-left: 20px; margin-bottom: 5px; }
+.l-lbl { font-weight: bold; color: #444; margin-left: 5px; }
+.l-val { font-weight: bold; color: #000; }
+
+.plate-print { border: 1px solid #000; padding: 2px 8px; border-radius: 4px; font-family: 'Tahoma', sans-serif; direction: ltr; display: inline-block; font-weight: bold; letter-spacing: 1px; }
+
+.l-table { width: 100%; border-collapse: collapse; border: 1px solid #000; margin-bottom: 15px; font-size: 9.5pt; }
+.l-table th { background-color: #eee !important; border: 1px solid #000; padding: 8px; font-weight: bold; }
+.l-table td { border: 1px solid #000; padding: 6px; text-align: center; vertical-align: middle; }
+.col-idx { width: 40px; background-color: #f9f9f9 !important; }
+
+.l-footer { display: flex; margin-top: 10px; }
+.l-note { flex: 1; border: 1px solid #000; border-radius: 5px; padding: 8px; margin-left: 10px; min-height: 80px; }
+.l-total { width: 250px; border: 1px solid #000; border-radius: 5px; }
+.lt-row { display: flex; justify-content: space-between; padding: 6px 10px; border-bottom: 1px solid #ccc; }
+.lt-final { background-color: #eee !important; font-weight: bold; border-bottom: none; }
+
+.l-signs { margin-top: 50px; display: flex; justify-content: space-around; text-align: center; }
+.sign-box { width: 30%; }
+.sign-line { margin-top: 50px; border-bottom: 1px dashed #000; width: 80%; margin-left: auto; margin-right: auto; }
