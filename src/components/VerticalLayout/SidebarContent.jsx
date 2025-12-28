@@ -140,7 +140,9 @@ const SidebarContent = () => {
           <div id="sidebar-menu">
             <ul className="metismenu list-unstyled" id="side-menu">
 
+              {/* ================================================== */}
               <li className="menu-title">داشبورد</li>
+              {/* ================================================== */}
               <li>
                 <Link to="/dashboard">
                   <i className="bx bx-home-circle"></i>
@@ -148,23 +150,26 @@ const SidebarContent = () => {
                 </Link>
               </li>
 
-              <li className="menu-title">مدیریت اعضا</li>
+              {/* ================================================== */}
+              <li className="menu-title">اطلاعات پایه</li>
+              {/* ================================================== */}
+
+              {/* مدیریت اعضا */}
               <li>
                 <Link to="/#" className="has-arrow">
-                  <i className="bx bx-user"></i>
-                  <span>اعضا</span>
+                  <i className="bx bx-user-pin"></i>
+                  <span>مدیریت اعضا</span>
                 </Link>
                 <ul className="sub-menu">
-                  <li><Link to="/members/add">ثبت عضو</Link></li>
+                  <li><Link to="/members/add">ثبت عضو جدید</Link></li>
                   <li><Link to="/members/list">لیست اعضا</Link></li>
                 </ul>
               </li>
 
-              <li className="menu-title">انبارداری</li>
-
+              {/* مشتریان */}
               <li>
                 <Link to="/#" className="has-arrow">
-                  <i className="bx bx-id-card"></i>
+                  <i className="bx bx-group"></i>
                   <span>مشتریان</span>
                 </Link>
                 <ul className="sub-menu">
@@ -173,25 +178,29 @@ const SidebarContent = () => {
                 </ul>
               </li>
 
+              {/* کالاها */}
               <li>
                 <Link to="/#" className="has-arrow">
-                  <i className="bx bx-package"></i>
-                  <span>کالاها و دسته‌بندی</span>
+                  <i className="bx bx-cube"></i>
+                  <span>کالا و انبار</span>
                 </Link>
                 <ul className="sub-menu">
-                  <li><Link to="/inventory/add-product">ثبت کالا</Link></li>
+                  <li><Link to="/inventory/add-product">تعریف کالا</Link></li>
                   <li><Link to="/inventory/product-list">لیست کالاها</Link></li>
                   <li><Link to="/inventory/category-list">دسته‌بندی‌ها</Link></li>
+                  <li><Link to="/inventory/unit-list">واحدهای سنجش</Link></li>
                 </ul>
               </li>
 
+              {/* ================================================== */}
               <li className="menu-title">عملیات انبار</li>
+              {/* ================================================== */}
 
-              {/* رسید کالا */}
+              {/* رسید کالا (ورود) */}
               <li>
                 <Link to="/#" className="has-arrow">
-                  <i className="bx bx-file"></i>
-                  <span>رسید کالا</span>
+                  <i className="bx bx-import"></i>
+                  <span>رسید کالا (ورود)</span>
                 </Link>
                 <ul className="sub-menu">
                   <li><Link to="/receipt/form">ثبت رسید جدید</Link></li>
@@ -202,20 +211,20 @@ const SidebarContent = () => {
               {/* ترخیص کالا */}
               <li>
                 <Link to="/#" className="has-arrow">
-                  <i className="bx bx-export"></i>
+                  <i className="bx bx-task"></i>
                   <span>ترخیص کالا</span>
                 </Link>
                 <ul className="sub-menu">
-                  <li><Link to="/clearances/form">ثبت ترخیص جدید</Link></li>
-                  <li><Link to="/clearances/report">گزارش ترخیص‌ها</Link></li>
+                  <li><Link to="/clearances/form">درخواست ترخیص</Link></li>
+                  <li><Link to="/clearances/report">کارتابل ترخیص</Link></li>
                 </ul>
               </li>
 
-              {/* بارگیری کالا */}
+              {/* بارگیری */}
               <li>
                 <Link to="/#" className="has-arrow">
                   <i className="bx bx-truck"></i>
-                  <span>بارگیری کالا</span>
+                  <span>بارگیری</span>
                 </Link>
                 <ul className="sub-menu">
                   <li><Link to="/loading/create">صدور دستور بارگیری</Link></li>
@@ -223,23 +232,74 @@ const SidebarContent = () => {
                 </ul>
               </li>
 
-              {/* ✅ منوی جدید: خروج و باسکول */}
+              {/* خروج و باسکول */}
               <li>
                 <Link to="/#" className="has-arrow">
-                  <i className="bx bx-door-open"></i>
-                  <span>خروج کالا (باسکول)</span>
+                  <i className="bx bx-exit"></i>
+                  <span>خروج و باسکول</span>
                 </Link>
                 <ul className="sub-menu">
-                  <li><Link to="/exit/create">ثبت خروج و توزین</Link></li>
+                  <li><Link to="/exit/create">ثبت خروج نهایی</Link></li>
                   <li><Link to="/exit/list">لیست خروج‌ها</Link></li>
                 </ul>
               </li>
 
-              <li className="menu-title">تنظیمات</li>
+              {/* ================================================== */}
+              <li className="menu-title">امور مالی</li>
+              {/* ================================================== */}
+
+              {/* 1. حسابداری */}
+              <li>
+                <Link to="/#" className="has-arrow">
+                  <i className="bx bx-file"></i>
+                  <span>حسابداری</span>
+                </Link>
+                <ul className="sub-menu">
+                  <li><Link to="/accounting/coding">مدیریت کدینگ (GL)</Link></li>
+                  <li><Link to="/accounting/documents">دفتر اسناد حسابداری</Link></li>
+                  <li><Link to="/accounting/new">ثبت سند دستی</Link></li>
+                </ul>
+              </li>
+
+              {/* 2. خزانه‌داری */}
+              <li>
+                <Link to="/#" className="has-arrow">
+                  <i className="bx bx-money"></i>
+                  <span>خزانه‌داری و چک</span>
+                </Link>
+                <ul className="sub-menu">
+                  <li><Link to="/accounting/treasury-form">دریافت و پرداخت جدید</Link></li>
+                  <li><Link to="/accounting/list">لیست اسناد خزانه</Link></li>
+                  <li><Link to="/accounting/check-operations">کارتابل چک‌ها</Link></li>
+                  <li><Link to="/accounting/definitions">تعاریف (بانک/صندوق)</Link></li>
+                </ul>
+              </li>
+
+              {/* ================================================== */}
+              <li className="menu-title">گزارش‌ها</li>
+              {/* ================================================== */}
+
+              <li>
+                <Link to="/#" className="has-arrow">
+                  <i className="bx bx-bar-chart-square"></i>
+                  <span>گزارشات مالی</span>
+                </Link>
+                <ul className="sub-menu">
+                  <li><Link to="/accounting/reports/journal">دفتر روزنامه</Link></li>
+                  <li><Link to="/accounting/reports/customers">مانده حساب مشتریان</Link></li>
+                  <li><Link to="/accounting/reports/comprehensive">مرور جامع حساب‌ها</Link></li>
+                  <li><Link to="/accounting/reports/ledger">گردش حساب (معین/تفصیلی)</Link></li>
+
+                </ul>
+              </li>
+
+              {/* ================================================== */}
+              <li className="menu-title">سیستم</li>
+              {/* ================================================== */}
               <li>
                 <Link to="/settings">
                   <i className="bx bx-cog"></i>
-                  <span>تنظیمات سیستم</span>
+                  <span>تنظیمات</span>
                 </Link>
               </li>
 

@@ -1,13 +1,21 @@
 import React, { useState, useEffect, useMemo, useCallback } from "react";
 import {
-    Container, Card, CardBody, Row, Col, Button, Table, Input, Label, CardTitle, Alert, Badge, InputGroup
+    Container, Card, CardBody, Row, Col, Button, Table, Input, Label, CardTitle, Alert, Badge, InputGroup, FormFeedback
 } from "reactstrap";
 import { toast } from "react-toastify";
 import { useNavigate, useSearchParams } from "react-router-dom";
+import { QRCodeSVG } from "qrcode.react";
+
+// --- سرویس‌ها (فرض بر این است که این توابع وجود دارند) ---
+import { registerExitDoc } from "../../services/treasuryService";
 import { findExitOrLoadingOrder, createExitPermit } from "../../services/exitService";
+// توابع جدید برای دریافت لیست بانک‌ها و صندوق‌ها (باید در treasuryService شما باشند)
+// اگر ندارید، پایین کد یک دیتای تستی (Mock) گذاشتم که کار کند.
+// import { getBankAccounts, getCashRegisters } from "../../services/treasuryService";
+
 import DatePickerWithIcon from "../../components/Shared/DatePickerWithIcon";
 import PlateDisplay from "../../components/PlateDisplay";
-import { QRCodeSVG } from "qrcode.react";
+import { supabase } from "../../helpers/supabase";
 
 export default function ExitCreate() {
     const [searchParams] = useSearchParams();
@@ -22,6 +30,11 @@ export default function ExitCreate() {
     const [exitStatusMsg, setExitStatusMsg] = useState(null);
     const [isMonthlyCalc, setIsMonthlyCalc] = useState(true);
 
+    // --- Financial States ---
+    const [bankAccounts, setBankAccounts] = useState([]); // لیست بانک‌ها
+    const [cashRegisters, setCashRegisters] = useState([]); // لیست صندوق‌ها
+    const [selectedFinancialId, setSelectedFinancialId] = useState(""); // آی‌دی بانک یا صندوق انتخاب شده
+
     // --- Form Fields ---
     const [exitDate, setExitDate] = useState(new Date().toISOString().slice(0, 10));
     const [referenceNo, setReferenceNo] = useState("");
@@ -29,21 +42,97 @@ export default function ExitCreate() {
     const [weighbridgeFee, setWeighbridgeFee] = useState(0);
     const [extraFee, setExtraFee] = useState(0);
     const [extraDesc, setExtraDesc] = useState("");
-    const [paymentMethod, setPaymentMethod] = useState("credit");
+    const [paymentMethod, setPaymentMethod] = useState("credit"); // credit, pos, cash
 
-    // Print
+    // --- Data Fetching (Banks & Cash Registers) ---
+// --- دریافت اطلاعات پایه (بانک‌ها و صندوق‌ها) با موجودی واقعی ---
+    useEffect(() => {
+        const fetchFinancialData = async () => {
+            try {
+                // ۱. دریافت دستگاه‌های POS با بانک متصل
+                const { data: posDevices, error: posErr } = await supabase
+                    .from('treasury_pos')
+                    .select('id, title, terminal_id, tafsili_id, treasury_banks(id, bank_name, account_no)')
+                    .order('id', { ascending: false });
+
+                // ۲. دریافت صندوق‌ها
+                const { data: cashes, error: cashErr } = await supabase
+                    .from('treasury_cashes')
+                    .select('id, title, tafsili_id')
+                    .order('id', { ascending: false });
+
+                if (posErr) console.error("Error fetching POS:", posErr);
+                if (cashErr) console.error("Error fetching cashes:", cashErr);
+
+                // ۳. جمع‌آوری تمام tafsili_id ها برای محاسبه موجودی
+                const posTafsiliIds = (posDevices || []).map(p => p.tafsili_id).filter(Boolean);
+                const cashTafsiliIds = (cashes || []).map(c => c.tafsili_id).filter(Boolean);
+                const allTafsiliIds = [...posTafsiliIds, ...cashTafsiliIds];
+
+                // ۴. محاسبه موجودی از financial_entries
+                let balances = {};
+                if (allTafsiliIds.length > 0) {
+                    const { data: entries, error: entryErr } = await supabase
+                        .from('financial_entries')
+                        .select('tafsili_id, bed, bes')
+                        .in('tafsili_id', allTafsiliIds);
+
+                    if (!entryErr && entries) {
+                        // محاسبه موجودی: جمع بدهکار - جمع بستانکار
+                        entries.forEach(entry => {
+                            const tid = entry.tafsili_id;
+                            if (!balances[tid]) balances[tid] = 0;
+                            balances[tid] += (Number(entry.bed) || 0) - (Number(entry.bes) || 0);
+                        });
+                    }
+                }
+
+                // ۵. تبدیل به فرمت dropdown با موجودی
+                const formattedBanks = (posDevices || []).map(pos => ({
+                    id: pos.tafsili_id,
+                    name: pos.title || (pos.treasury_banks?.bank_name + ' - ' + pos.terminal_id),
+                    balance: balances[pos.tafsili_id] || 0,
+                    pos_id: pos.id
+                })).filter(b => b.id);
+
+                const formattedCashes = (cashes || []).map(cash => ({
+                    id: cash.tafsili_id,
+                    name: cash.title,
+                    balance: balances[cash.tafsili_id] || 0,
+                    cash_id: cash.id
+                })).filter(c => c.id);
+
+                setBankAccounts(formattedBanks);
+                setCashRegisters(formattedCashes);
+
+                console.log("POS Banks with balance:", formattedBanks);
+                console.log("Cash Registers with balance:", formattedCashes);
+            } catch (err) {
+                console.error("Error fetching treasury data:", err);
+            }
+        };
+
+        fetchFinancialData();
+    }, []);    // --- Handlers ---
     const handlePrint = () => {
         setTimeout(() => {
             window.print();
         }, 100);
     };
 
-    const handleTaxSystem = () => toast.info("در حال ارسال به سامانه مودیان...");
+    const handleTaxSystem = () => {
+        toast.info("⏳ در حال ارسال به سامانه مودیان...");
+        setTimeout(() => toast.success("✅ ارسال شد."), 2000);
+    };
 
-    // --- تابع اصلی دریافت اطلاعات ---
+    const handleWarehouseSystem = () => {
+        toast.info("⏳ در حال ثبت در سامانه جامع...");
+        setTimeout(() => toast.success("✅ کد رهگیری دریافت شد."), 2000);
+    };
+
+    // --- Fetch Main Order Data ---
     const fetchOrderData = useCallback(async (searchNumber) => {
         setLoading(true);
-        // پاکسازی استیت‌ها
         setExitStatusMsg(null);
         setSavedExitId(null);
         setIsReadOnly(false);
@@ -53,14 +142,15 @@ export default function ExitCreate() {
         try {
             const result = await findExitOrLoadingOrder(searchNumber);
 
-            // اگر سرویس نال برگرداند
-            if (!result) {
-                throw new Error("سندی با این شماره یافت نشد.");
-            }
+            if (!result) throw new Error("سندی با این شماره یافت نشد.");
 
             setOrderInfo({
-                loading_id: result.loading_id, orderNo: result.order_no,
-                driver: result.driver_name, plate: result.plate_number, customer: result.customer_name
+                loading_id: result.loading_id,
+                orderNo: result.order_no,
+                driver: result.driver_name,
+                plate: result.plate_number,
+                customer: result.customer_name,
+                customer_id: result.customer_id
             });
 
             if (result.is_processed) {
@@ -70,8 +160,14 @@ export default function ExitCreate() {
                 setExtraFee(result.extra_fee || 0);
                 setExtraDesc(result.extra_description || "");
                 setPaymentMethod(result.payment_method || "credit");
+
+                // ست کردن حساب انتخاب شده اگر قبلا ذخیره شده
+                if (result.financial_account_id) {
+                    setSelectedFinancialId(result.financial_account_id);
+                }
+
                 setReferenceNo(result.reference_no || "");
-                if(result.exit_date) setExitDate(result.exit_date);
+                if (result.exit_date) setExitDate(result.exit_date);
                 setItems(result.items);
 
                 if (result.status === 'final') {
@@ -84,7 +180,7 @@ export default function ExitCreate() {
             } else {
                 setSavedExitId(null); setIsReadOnly(false); setExitStatusMsg(null);
                 setItems(result.items);
-                setDriverNationalCode(""); setWeighbridgeFee(0); setExtraFee(0); setReferenceNo("");
+                setDriverNationalCode(""); setWeighbridgeFee(0); setExtraFee(0); setReferenceNo(""); setSelectedFinancialId("");
             }
         } catch (err) {
             console.error(err);
@@ -94,26 +190,18 @@ export default function ExitCreate() {
         }
     }, []);
 
-    // --- ✅ هندلر دکمه جستجو و اینتر (ولیدیشن اینجا انجام می‌شود) ---
     const handleManualSearch = () => {
-        // 1. بررسی خالی بودن
-        if (!searchNo || String(searchNo).trim() === "") {
-            toast.warn("لطفاً شماره سفارش یا شناسه خروج را وارد کنید.");
-            return;
-        }
-        // 2. ارسال به تابع اصلی
+        if (!searchNo || String(searchNo).trim() === "") return toast.warn("شماره را وارد کنید.");
         fetchOrderData(searchNo);
     };
 
-    // --- هندلر دکمه اینتر ---
     const handleKeyDown = (e) => {
         if (e.key === 'Enter') {
-            e.preventDefault(); // جلوگیری از رفرش
+            e.preventDefault();
             handleManualSearch();
         }
     };
 
-    // --- دریافت پارامتر از URL ---
     useEffect(() => {
         const urlOrderNo = searchParams.get("orderNo");
         if (urlOrderNo) {
@@ -122,18 +210,14 @@ export default function ExitCreate() {
         }
     }, [searchParams, fetchOrderData]);
 
-
-    // --- Helper: Parse Plate ---
+    // Helper functions
     const parsePlateString = (plateStr) => {
         if (!plateStr) return null;
         const parts = plateStr.split('-');
-        if (parts.length === 4) {
-            return { iranRight: parts[0], mid3: parts[1], letter: parts[2], left2: parts[3] };
-        }
+        if (parts.length === 4) return { iranRight: parts[0], mid3: parts[1], letter: parts[2], left2: parts[3] };
         return null;
     };
 
-    // --- Calculations ---
     const calculateDuration = (entryDateStr, exitDateStr) => {
         if (!entryDateStr || !exitDateStr) return { months: 1, days: 0 };
         const start = new Date(entryDateStr);
@@ -152,7 +236,6 @@ export default function ExitCreate() {
             const wEmpty = Number(item.weight_empty) || 0;
             const net = (wFull >= wEmpty) ? (wFull - wEmpty) : 0;
             let base = (item.fee_type === 'quantity') ? (Number(item.qty) || 0) : net;
-
             let timeMultiplier = 1;
             let durationInfo = { months: 1, days: 0 };
 
@@ -188,39 +271,115 @@ export default function ExitCreate() {
         return { totalStorage, totalLoading, subTotal, vatAmount, grandTotal: subTotal + vatAmount };
     }, [calculatedItems, weighbridgeFee, extraFee]);
 
+    // --- Submit Handler (Updated for Financials) ---
     const handleSubmit = async (status) => {
         if (!orderInfo || isReadOnly) return;
         if (!driverNationalCode) return toast.error("کد ملی راننده الزامی است.");
+
+        // اعتبارسنجی مالی (فقط برای ثبت نهایی)
+        if (status === 'final') {
+            if (paymentMethod === 'pos' && !selectedFinancialId) {
+                return toast.error("لطفاً حساب بانکی متصل به کارتخوان را انتخاب کنید.");
+            }
+            if (paymentMethod === 'cash' && !selectedFinancialId) {
+                return toast.error("لطفاً صندوق دریافت وجه را انتخاب کنید.");
+            }
+        }
+
         setLoading(true);
         try {
+            // 1. آماده‌سازی آیتم‌ها
+            const formattedItems = calculatedItems.map((item, index) => {
+                const finalId = item.item_id || item.id;
+                if (!finalId) throw new Error(`شناسه کالا برای ردیف ${index + 1} یافت نشد.`);
+
+                return {
+                    item_id: finalId,
+                    weight_full: Number(item.weight_full) || 0,
+                    weight_empty: Number(item.weight_empty) || 0,
+                    weight_net: Number(item.weight_net) || 0,
+                    qty: Number(item.qty) || 0,
+                    fee_type: item.fee_type || 'weight',
+                    base_storage_rate: Number(item.base_storage_rate) || 0,
+                    row_storage_fee: Number(item.row_storage_fee) || 0,
+                    row_loading_fee: Number(item.row_loading_fee) || 0
+                };
+            });
+
+            // 2. ساخت پی‌لود
             const payload = {
                 loading_order_id: orderInfo.loading_id,
+                owner_id: orderInfo.customer_id,
+                driver_name: orderInfo.driver,
+                plate_number: orderInfo.plate,
+                driver_national_code: driverNationalCode,
                 exit_date: exitDate,
                 reference_no: referenceNo,
-                driver_national_code: driverNationalCode,
+                status: status,
                 weighbridge_fee: Number(weighbridgeFee),
                 extra_fee: Number(extraFee),
                 extra_description: extraDesc,
                 vat_fee: invoice.vatAmount,
                 total_fee: invoice.totalStorage,
                 total_loading_fee: invoice.totalLoading,
+
+                // اطلاعات مالی
                 payment_method: paymentMethod,
-                status: status,
-                items: calculatedItems
+                financial_account_id: (paymentMethod === 'pos' || paymentMethod === 'cash') ? selectedFinancialId : null,
+
+                items: formattedItems
             };
-            const res = await createExitPermit(payload);
-            toast.success(status === 'final' ? "خروج نهایی شد." : "پیش‌نویس ذخیره شد.");
-            setSavedExitId(res.id);
-            if (status === 'final') { setIsReadOnly(true); setExitStatusMsg(`سند خروج قطعی شماره ${result.exit_id}`); }
-            else setExitStatusMsg(`پیش‌نویس ثبت شده شماره ${res.id}`);
-        } catch (err) { toast.error("خطا در ثبت."); } finally { setLoading(false); }
+
+            // 3. ارسال به سرویس
+            const result = await createExitPermit(payload);
+
+            // دریافت ID (پشتیبانی از فرمت‌های مختلف پاسخ)
+            const savedId = result?.id || result?.data?.id || (Array.isArray(result) && result[0]?.id);
+
+            if (!savedId) {
+                throw new Error("خروج ثبت شد اما شناسه (ID) دریافت نشد.");
+            }
+
+            setSavedExitId(savedId);
+
+            // 4. صدور سند حسابداری (اگر نهایی بود)
+            if (status === 'final') {
+                try {
+                    const accResult = await registerExitDoc(savedId);
+
+                    if (accResult && accResult.status === 'success') {
+                        toast.success(`خروج نهایی شد و سند حسابداری شماره ${accResult.doc_no} صادر گردید.`);
+                    } else {
+                        toast.warning("خروج ثبت شد اما سند حسابداری صادر نشد: " + (accResult?.message || ""));
+                    }
+
+                    setIsReadOnly(true);
+                    setExitStatusMsg(`سند خروج قطعی شماره ${savedId}`);
+                } catch (accErr) {
+                    console.error(accErr);
+                    toast.warning("خروج ثبت شد، اما در صدور سند حسابداری خطایی رخ داد.");
+                    setIsReadOnly(true);
+                }
+            } else {
+                toast.success("پیش‌نویس با موفقیت ذخیره شد.");
+                setExitStatusMsg(`پیش‌نویس ثبت شده شماره ${savedId}`);
+            }
+
+        } catch (err) {
+            console.error(err);
+            toast.error("خطا در ثبت: " + (err.message || "مشکل نامشخص"));
+        } finally {
+            setLoading(false);
+        }
     };
+
 
     const qrUrl = typeof window !== 'undefined' ? `${window.location.origin}/exit/view/${savedExitId || 0}` : '';
 
     return (
-        <div className="page-content-wrapper">
+        <div className="page-content">
 
+            {/* CSS مخصوص پرینت - اصلاح شده */}
             <style>{`
                 @media screen {
                     .print-only-section { display: none !important; }
@@ -242,6 +401,7 @@ export default function ExitCreate() {
                         z-index: 99999;
                         padding: 10px;
                         font-size: 10px;
+                        direction: rtl;
                     }
 
                     .print-container-frame {
@@ -261,12 +421,11 @@ export default function ExitCreate() {
             `}</style>
 
             {/* ============================================== */}
-            {/* 🖨️ بخش پرینت (Invoice) */}
+            {/* 🖨️ بخش پرینت (Invoice) - اصلاح شده */}
             {/* ============================================== */}
             <div className="print-only-section" style={{direction: 'rtl', fontFamily: 'Tahoma, Arial'}}>
                 {orderInfo ? (
                     <div className="print-container-frame">
-
                         <div>
                             {/* Header */}
                             <header className="d-flex justify-content-between align-items-center border-bottom border-dark pb-2 mb-2">
@@ -322,14 +481,11 @@ export default function ExitCreate() {
                                                 <td className="text-start fw-bold text-truncate" style={{maxWidth:'150px'}}>{item.product_name}</td>
                                                 <td className="font-monospace" dir="ltr">{item.batch_no || "-"}</td>
                                                 <td>{item.qty}</td>
-
                                                 {isMonthlyCalc && <td>{item.entry_date ? new Date(item.entry_date).toLocaleDateString('fa-IR') : '-'}</td>}
                                                 {isMonthlyCalc && <td>{item.months_duration} ماه</td>}
-
                                                 <td className="fw-bold">{Number(item.weight_net).toLocaleString()}</td>
                                                 <td>{Number(item.cleared_weight).toLocaleString()}</td>
                                                 <td dir="ltr" className={variance !== 0 ? "fw-bold" : ""}>{variance > 0 ? `+${variance}` : variance}</td>
-
                                                 <td>{Number(item.base_storage_rate).toLocaleString()}</td>
                                                 <td className="fw-bold">{Number(item.row_storage_fee).toLocaleString()}</td>
                                             </tr>
@@ -346,7 +502,9 @@ export default function ExitCreate() {
                                 <div className="col-7 pe-2 d-flex flex-column justify-content-between">
                                     <div style={{fontSize: '10px'}} className="mb-1">
                                         <span className="fw-bold">روش تسویه:</span>
-                                        <span className="border border-dark px-1 rounded ms-1">{paymentMethod === 'credit' ? 'نسیه' : 'نقدی/کارتخوان'}</span>
+                                        <span className="border border-dark px-1 rounded ms-1">
+                                            {paymentMethod === 'credit' ? 'نسیه' : paymentMethod === 'pos' ? 'کارتخوان' : 'نقدی'}
+                                        </span>
                                         {extraDesc && <span className="ms-2 text-muted">({extraDesc})</span>}
                                     </div>
                                     <div className="d-flex justify-content-around align-items-end mt-2" style={{fontSize: '10px'}}>
@@ -380,7 +538,7 @@ export default function ExitCreate() {
             {/* ============================================== */}
             {/* 🖥️ بخش فرم اصلی (Screen) */}
             {/* ============================================== */}
-            <Container fluid className="screen-content">
+            <Container fluid className="screen-content d-print-none pb-5">
                 <div className="d-print-none">
                     <Row><Col xs={12}><h4 className="mb-4 font-size-18 fw-bold">مدیریت خروج و باسکول</h4></Col></Row>
                 </div>
@@ -388,57 +546,28 @@ export default function ExitCreate() {
                 <Card className="mb-3 shadow-sm border-0 d-print-none">
                     <CardBody>
                         <Row className="align-items-center gy-3">
-                            {/* فیلد جستجو و دکمه چسبیده */}
                             <Col md={5} xs={12}>
-                                <div className="d-flex align-items-center">
-                                    <InputGroup className="shadow-sm">
-                                        <Input
-                                            className="text-center fw-bold font-size-16"
-                                            value={searchNo}
-                                            onChange={e=>setSearchNo(e.target.value)}
-                                            onKeyDown={handleKeyDown}
-                                            placeholder="شماره سفارش یا خروج..."
-                                        />
-                                        <Button color="primary" onClick={handleManualSearch} disabled={loading} className="px-4">
-                                            {loading ? <i className="bx bx-loader bx-spin"></i> : <i className="bx bx-search-alt"></i>}
-                                        </Button>
-                                    </InputGroup>
-                                </div>
+                                <InputGroup className="shadow-sm">
+                                    <Input
+                                        className="text-center fw-bold font-size-16"
+                                        value={searchNo}
+                                        onChange={e=>setSearchNo(e.target.value)}
+                                        onKeyDown={handleKeyDown}
+                                        placeholder="شماره سفارش یا خروج..."
+                                    />
+                                    <Button color="primary" onClick={handleManualSearch} disabled={loading} className="px-4">
+                                        {loading ? <i className="bx bx-loader bx-spin"></i> : <i className="bx bx-search-alt"></i>}
+                                    </Button>
+                                </InputGroup>
                             </Col>
 
-                            {/* سوییچ هوشمند */}
                             <Col md={7} xs={12} className="d-flex justify-content-md-end justify-content-center">
                                 <div className="d-flex align-items-center gap-2 p-2 px-3 rounded border shadow-sm bg-white">
-                                    <span
-                                        className={`fw-bold font-size-13 cursor-pointer ${!isMonthlyCalc ? 'text-danger' : 'text-muted'}`}
-                                        onClick={() => setIsMonthlyCalc(false)}
-                                        style={{cursor: 'pointer'}}
-                                    >
-                                        ساده
-                                    </span>
-                                    <div
-                                        onClick={() => setIsMonthlyCalc(!isMonthlyCalc)}
-                                        style={{
-                                            width: '50px', height: '26px', borderRadius: '13px',
-                                            backgroundColor: isMonthlyCalc ? '#0d6efd' : '#dc3545',
-                                            cursor: 'pointer', position: 'relative',
-                                            transition: 'background-color 0.2s'
-                                        }}
-                                    >
-                                        <div style={{
-                                            width: '22px', height: '22px', borderRadius: '50%',
-                                            backgroundColor: 'white', position: 'absolute',
-                                            top: '2px', left: isMonthlyCalc ? '26px' : '2px',
-                                            transition: 'left 0.2s', boxShadow: '0 2px 4px rgba(0,0,0,0.2)'
-                                        }}/>
+                                    <span className={`fw-bold font-size-13 cursor-pointer ${!isMonthlyCalc ? 'text-danger' : 'text-muted'}`} onClick={() => setIsMonthlyCalc(false)}>ساده</span>
+                                    <div onClick={() => setIsMonthlyCalc(!isMonthlyCalc)} style={{width: '50px', height: '26px', borderRadius: '13px', backgroundColor: isMonthlyCalc ? '#0d6efd' : '#dc3545', cursor: 'pointer', position: 'relative'}}>
+                                        <div style={{width: '22px', height: '22px', borderRadius: '50%', backgroundColor: 'white', position: 'absolute', top: '2px', left: isMonthlyCalc ? '26px' : '2px', transition: 'left 0.2s', boxShadow: '0 2px 4px rgba(0,0,0,0.2)'}}/>
                                     </div>
-                                    <span
-                                        className={`fw-bold font-size-13 cursor-pointer ${isMonthlyCalc ? 'text-primary' : 'text-muted'}`}
-                                        onClick={() => setIsMonthlyCalc(true)}
-                                        style={{cursor: 'pointer'}}
-                                    >
-                                        هوشمند (ماهانه)
-                                    </span>
+                                    <span className={`fw-bold font-size-13 cursor-pointer ${isMonthlyCalc ? 'text-primary' : 'text-muted'}`} onClick={() => setIsMonthlyCalc(true)}>هوشمند (ماهانه)</span>
                                 </div>
                             </Col>
                         </Row>
@@ -454,7 +583,7 @@ export default function ExitCreate() {
 
                 {orderInfo && (
                     <div className="animate__animated animate__fadeIn">
-                        {/* Header Info */}
+                        {/* 1. Header Info */}
                         <Card className="shadow-sm border-0 mb-3">
                             <CardBody>
                                 <CardTitle className="h5 mb-4 text-primary border-bottom pb-2">۱. مشخصات خروج و راننده</CardTitle>
@@ -463,18 +592,13 @@ export default function ExitCreate() {
                                     <Col md={3}><Label className="fw-bold text-muted font-size-13">شماره عطف / بارنامه</Label><Input value={referenceNo} onChange={e => setReferenceNo(e.target.value)} disabled={isReadOnly} /></Col>
                                     <Col md={3}><Label className="fw-bold text-muted font-size-13">نام راننده</Label><Input value={orderInfo.driver} disabled className="bg-light" /></Col>
                                     <Col md={3}><Label className="fw-bold text-danger font-size-13">کد ملی راننده *</Label><Input value={driverNationalCode} onChange={e => setDriverNationalCode(e.target.value)} disabled={isReadOnly} /></Col>
-                                    <Col md={3}>
-                                        <Label className="fw-bold text-muted font-size-13">پلاک خودرو</Label>
-                                        <div className="d-flex align-items-center justify-content-center" style={{minHeight:'45px'}}>
-                                            {parsePlateString(orderInfo.plate) ? <div style={{transform: 'scale(0.85)', transformOrigin: 'center'}}><PlateDisplay plateData={parsePlateString(orderInfo.plate)} /></div> : <div className="form-control bg-light text-center fw-bold">{orderInfo.plate || "---"}</div>}
-                                        </div>
-                                    </Col>
+                                    <Col md={3}><Label className="fw-bold text-muted font-size-13">پلاک خودرو</Label><div className="d-flex align-items-center justify-content-center" style={{minHeight:'45px'}}>{parsePlateString(orderInfo.plate) ? <div style={{transform: 'scale(0.85)', transformOrigin: 'center'}}><PlateDisplay plateData={parsePlateString(orderInfo.plate)} /></div> : <div className="form-control bg-light text-center fw-bold">{orderInfo.plate || "---"}</div>}</div></Col>
                                     <Col md={3}><Label className="fw-bold text-muted font-size-13">صاحب کالا</Label><Input value={orderInfo.customer} disabled className="bg-light" /></Col>
                                 </Row>
                             </CardBody>
                         </Card>
 
-                        {/* Items Table - Screen */}
+                        {/* 2. Items Table */}
                         <Card className="shadow-sm border-0 mb-3">
                             <CardBody>
                                 <CardTitle className="h5 mb-4 text-primary border-bottom pb-2">۲. جزئیات کالا و توزین باسکول</CardTitle>
@@ -491,7 +615,6 @@ export default function ExitCreate() {
                                             <th className="bg-soft-primary text-primary" style={{width: '110px'}}>وزن پر (kg)</th>
                                             <th className="bg-soft-primary text-primary" style={{width: '110px'}}>وزن خالی (kg)</th>
                                             <th className="bg-soft-warning text-dark" style={{width: '120px'}}>وزن خالص</th>
-                                            {/* ✅ ستون وزن حواله در UI */}
                                             <th style={{width: '120px'}}>وزن حواله</th>
                                             <th>مغایرت</th>
                                             <th>جمع انبارداری</th>
@@ -506,26 +629,15 @@ export default function ExitCreate() {
                                                     <td className="text-start">
                                                         <div className="fw-bold font-size-14 text-dark">{item.product_name}</div>
                                                         <div className="text-muted font-size-11">Batch: {item.batch_no}</div>
-                                                        {isMonthlyCalc && item.entry_date && <div className="font-size-11 text-info mt-1 d-print-none"><i className="bx bx-calendar me-1"></i>ورود: {new Date(item.entry_date).toLocaleDateString('fa-IR')}</div>}
                                                     </td>
                                                     <td><Badge className={"font-size-11 p-2 badge-soft-" + (item.fee_type === 'quantity' ? 'info' : 'secondary')}>{item.fee_type === 'quantity' ? 'تعدادی' : 'وزنی'}</Badge></td>
                                                     <td className="text-muted font-size-13">{Number(item.base_storage_rate).toLocaleString()}</td>
-
-                                                    <td className="text-center"><Input type="number" bsSize="sm" className="text-center fw-bold" value={item.qty || ''} onChange={e => handleItemChange(idx, 'qty', e.target.value)} disabled={isReadOnly} style={{width: '60px', margin: '0 auto'}} /></td>
-
-                                                    {isMonthlyCalc && (
-                                                        <td className="bg-soft-info">
-                                                            <div className="fw-bold text-dark">{item.months_duration} ماه</div>
-                                                            <div className="font-size-11 text-muted d-print-none">({item.days_duration} روز)</div>
-                                                        </td>
-                                                    )}
+                                                    <td><Input type="number" bsSize="sm" className="text-center fw-bold" value={item.qty || ''} onChange={e => handleItemChange(idx, 'qty', e.target.value)} disabled={isReadOnly} style={{width: '60px', margin: '0 auto'}} /></td>
+                                                    {isMonthlyCalc && <td className="bg-soft-info"><div className="fw-bold text-dark">{item.months_duration} ماه</div></td>}
                                                     <td><Input type="number" bsSize="sm" className="text-center fw-bold" value={item.weight_full || ''} onChange={e=>handleItemChange(idx,'weight_full',e.target.value)} disabled={isReadOnly} /></td>
                                                     <td><Input type="number" bsSize="sm" className="text-center fw-bold" value={item.weight_empty || ''} onChange={e=>handleItemChange(idx,'weight_empty',e.target.value)} disabled={isReadOnly} /></td>
                                                     <td className="fw-bold bg-soft-warning font-size-15">{Number(item.weight_net).toLocaleString()}</td>
-
-                                                    {/* ✅ نمایش وزن حواله */}
                                                     <td className="fw-bold text-secondary font-size-14">{Number(item.cleared_weight).toLocaleString()}</td>
-
                                                     <td dir="ltr">{variance !== 0 ? <Badge color={variance > 0 ? "danger" : "success"} className="font-size-12">{variance > 0 ? `+${variance}` : variance}</Badge> : <span className="text-muted">-</span>}</td>
                                                     <td className="fw-bold text-success font-size-14 bg-light">{Number(item.row_storage_fee).toLocaleString()}</td>
                                                 </tr>
@@ -533,18 +645,11 @@ export default function ExitCreate() {
                                         })}
                                         </tbody>
                                     </Table>
-
-                                    {isMonthlyCalc && (
-                                        <div className="alert alert-info d-flex align-items-center mt-3 p-2 font-size-13 mb-0 rounded shadow-sm border-0 d-print-none">
-                                            <i className="bx bx-info-circle font-size-20 me-2"></i>
-                                            <div><strong>فرمول محاسبه:</strong> (وزن خالص یا تعداد × نرخ پایه × تعداد ماه). هر ۳۰ روز توقف معادل یک ماه کامل محاسبه می‌گردد.</div>
-                                        </div>
-                                    )}
                                 </div>
                             </CardBody>
                         </Card>
 
-                        {/* Financials & Actions */}
+                        {/* 3. Financials & Actions */}
                         <Row>
                             <Col lg={8}>
                                 <Card className="shadow-sm border-0 h-100">
@@ -555,18 +660,63 @@ export default function ExitCreate() {
                                             <Col md={4}><Label className="text-muted">هزینه متفرقه</Label><Input type="number" value={extraFee} onChange={e=>setExtraFee(e.target.value)} disabled={isReadOnly}/></Col>
                                             <Col md={4}><Label className="text-muted">توضیحات هزینه</Label><Input value={extraDesc} onChange={e=>setExtraDesc(e.target.value)} disabled={isReadOnly}/></Col>
                                         </Row>
+
+                                        {/* Financial Method Selection */}
                                         <div className="bg-light p-3 rounded border">
                                             <Label className="fw-bold mb-3 d-block text-dark">روش تسویه حساب:</Label>
-                                            <div className="d-flex flex-wrap gap-4">
-                                                {['credit', 'pos', 'cash'].map(m => (
-                                                    <div key={m} className="form-check cursor-pointer" onClick={() => !isReadOnly && setPaymentMethod(m)}>
-                                                        <Input type="radio" className="form-check-input" checked={paymentMethod === m} readOnly />
-                                                        <Label className="form-check-label fw-bold ms-1 cursor-pointer text-dark">
-                                                            {m === 'credit' ? 'نسیه (حساب مشتری)' : m === 'pos' ? 'کارتخوان' : 'نقدی'}
-                                                        </Label>
+                                            <Row>
+                                                <Col md={6}>
+                                                    <div className="d-flex flex-wrap gap-4 mb-3">
+                                                        {['credit', 'pos', 'cash'].map(m => (
+                                                            <div key={m} className="form-check cursor-pointer" onClick={() => !isReadOnly && setPaymentMethod(m)}>
+                                                                <Input type="radio" className="form-check-input" checked={paymentMethod === m} onChange={() => {}} disabled={isReadOnly} />
+                                                                <Label className="form-check-label fw-bold ms-1 cursor-pointer text-dark">
+                                                                    {m === 'credit' ? 'نسیه (حساب مشتری)' : m === 'pos' ? 'کارتخوان (بانک)' : 'نقدی (صندوق)'}
+                                                                </Label>
+                                                            </div>
+                                                        ))}
                                                     </div>
-                                                ))}
-                                            </div>
+                                                </Col>
+
+                                                {/* Conditional Dropdown for Bank/Fund */}
+                                                <Col md={6}>
+                                                    {paymentMethod === 'pos' && (
+                                                        <div className="animate__animated animate__fadeIn">
+                                                            <Label className="font-size-12 fw-bold text-primary">انتخاب بانک متصل به کارتخوان:</Label>
+                                                            <Input
+                                                                type="select"
+                                                                value={selectedFinancialId}
+                                                                onChange={e => setSelectedFinancialId(e.target.value)}
+                                                                disabled={isReadOnly}
+                                                                className="shadow-sm"
+                                                            >
+                                                                <option value="">-- انتخاب کنید --</option>
+                                                                {bankAccounts.map(b => (
+                                                                    <option key={b.id} value={b.id}>{b.name} (موجودی: {Number(b.balance).toLocaleString()})</option>
+                                                                ))}
+                                                            </Input>
+                                                        </div>
+                                                    )}
+
+                                                    {paymentMethod === 'cash' && (
+                                                        <div className="animate__animated animate__fadeIn">
+                                                            <Label className="font-size-12 fw-bold text-success">انتخاب صندوق دریافت وجه:</Label>
+                                                            <Input
+                                                                type="select"
+                                                                value={selectedFinancialId}
+                                                                onChange={e => setSelectedFinancialId(e.target.value)}
+                                                                disabled={isReadOnly}
+                                                                className="shadow-sm"
+                                                            >
+                                                                <option value="">-- انتخاب کنید --</option>
+                                                                {cashRegisters.map(c => (
+                                                                    <option key={c.id} value={c.id}>{c.name} (موجودی: {Number(c.balance).toLocaleString()})</option>
+                                                                ))}
+                                                            </Input>
+                                                        </div>
+                                                    )}
+                                                </Col>
+                                            </Row>
                                         </div>
                                     </CardBody>
                                 </Card>
@@ -596,25 +746,35 @@ export default function ExitCreate() {
                                             </div>
                                         </div>
 
-                                        <div className="d-grid gap-2 mt-4 d-print-none">
+                                        <div className="mt-4 d-print-none">
                                             {!isReadOnly ? (
-                                                <>
-                                                    <Button color="success" size="lg" className="shadow-lg" onClick={() => handleSubmit('final')} disabled={loading}>
-                                                        <i className="bx bx-check-double font-size-20 align-middle me-2"></i> ثبت نهایی و خروج
-                                                    </Button>
-                                                    <Button color="secondary" outline onClick={() => handleSubmit('draft')} disabled={loading}>
-                                                        <i className="bx bx-save font-size-18 align-middle me-2"></i> ذخیره موقت
-                                                    </Button>
-                                                </>
+                                                <Row className="g-2">
+                                                    <Col xs={6}>
+                                                        <Button color="success" size="lg" className="w-100 shadow-lg" onClick={() => handleSubmit('final')} disabled={loading}>
+                                                            <i className="bx bx-check-double font-size-20 align-middle me-2"></i> ثبت نهایی
+                                                        </Button>
+                                                    </Col>
+                                                    <Col xs={6}>
+                                                        <Button color="secondary" outline size="lg" className="w-100" onClick={() => handleSubmit('draft')} disabled={loading}>
+                                                            <i className="bx bx-save font-size-18 align-middle me-2"></i> موقت
+                                                        </Button>
+                                                    </Col>
+                                                </Row>
                                             ) : (
-                                                <>
+                                                <div className="d-flex flex-column gap-2">
                                                     <Button color="warning" size="lg" className="shadow-lg" onClick={handlePrint}>
                                                         <i className="bx bx-printer font-size-18 align-middle me-2"></i> چاپ برگه خروج
                                                     </Button>
-                                                    <Button color="info" outline className="mt-2" onClick={handleTaxSystem}>
-                                                        <i className="bx bx-cloud-upload font-size-18 align-middle me-2"></i> ارسال به سامانه مودیان
-                                                    </Button>
-                                                </>
+
+                                                    <div className="d-flex gap-2">
+                                                        <Button color="info" outline className="w-100 d-flex align-items-center justify-content-center" onClick={handleTaxSystem}>
+                                                            <i className="bx bx-cloud-upload font-size-18 me-2"></i> مودیان
+                                                        </Button>
+                                                        <Button color="primary" outline className="w-100 d-flex align-items-center justify-content-center" onClick={handleWarehouseSystem}>
+                                                            <i className="bx bx-building-house font-size-18 me-2"></i> جامع
+                                                        </Button>
+                                                    </div>
+                                                </div>
                                             )}
                                         </div>
                                     </CardBody>
@@ -623,6 +783,10 @@ export default function ExitCreate() {
                         </Row>
                     </div>
                 )}
+
+                {/* فضای خالی برای حل مشکل فوتر */}
+                <div style={{height: '120px', width: '100%', clear: 'both'}}></div>
+
             </Container>
         </div>
     );

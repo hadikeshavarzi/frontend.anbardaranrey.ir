@@ -1,16 +1,13 @@
 import { supabase } from "../helpers/supabase";
 
 // --- تابع کمکی: دریافت تاریخ‌های ورود بر اساس کالا ---
-// این تابع در هر دو بخش (فرم و پرینت) استفاده می‌شود تا تاریخ‌ها همیشه درست باشند
 const fetchProductEntryDates = async (items) => {
     const productIds = items.map(item => {
-        // هندل کردن ساختار متفاوت در فرم اصلی و پرینت
-        if (item.product_id) return item.product_id; // ساختار مستقیم
+        if (item.product_id) return item.product_id;
         const prod = item.loading_order_items?.products || item.products;
         return prod?.id;
     }).filter(Boolean);
 
-    // حذف تکراری‌ها
     const uniqueIds = [...new Set(productIds)];
     const productReceiptDates = {};
 
@@ -18,11 +15,10 @@ const fetchProductEntryDates = async (items) => {
         const { data: receiptData } = await supabase.from("receipt_items")
             .select(`product_id, receipts ( doc_date )`)
             .in("product_id", uniqueIds)
-            .order("created_at", { ascending: false }); // جدیدترین رسید
+            .order("created_at", { ascending: false });
 
         if (receiptData) {
             receiptData.forEach(r => {
-                // اگر برای این محصول هنوز تاریخی ست نشده، اولین (جدیدترین) را بردار
                 if (!productReceiptDates[r.product_id]) {
                     productReceiptDates[r.product_id] = r.receipts?.doc_date;
                 }
@@ -39,7 +35,7 @@ export const findExitOrLoadingOrder = async (searchNo) => {
     let exitRecord = null;
     let loadingOrderRecord = null;
 
-    // تعریف زیر-کوئری‌ها برای تمیزی کد
+    // تعریف زیر-کوئری آیتم‌ها
     const itemsSelectQuery = `
         batch_no, qty,
         products ( 
@@ -50,18 +46,31 @@ export const findExitOrLoadingOrder = async (searchNo) => {
         clearance_items ( weight, created_at )
     `;
 
+    // اصلاح کوئری خروج: دریافت customer_id از طریق ترخیص
     const fullExitQuery = `
         *,
-        loading_orders!inner ( id, order_no, driver_name, plate_number, clearances ( customers ( name ) ) ),
+        loading_orders!inner ( 
+            id, order_no, driver_name, plate_number, 
+            clearances ( customer_id, customers ( id, name ) ) 
+        ),
         warehouse_exit_items ( *, loading_order_items ( ${itemsSelectQuery} ) )
     `;
 
     // 1. جستجو در Loading Orders (سند جدید)
+    // ✅ اصلاح مهم: اینجا باید clearances و customers را صدا بزنیم تا owner_id را بگیریم
     const { data: loadingOrder } = await supabase.from("loading_orders")
-        .select("id, order_no").eq("order_no", searchNo).maybeSingle();
+        .select(`
+            id, order_no, driver_name, plate_number,
+            clearances (
+                customer_id,
+                customers ( id, name )
+            )
+        `)
+        .eq("order_no", searchNo)
+        .maybeSingle();
 
     if (loadingOrder) {
-        // چک کن آیا برای این بارگیری قبلاً خروج ثبت شده؟
+        // چک کن آیا قبلاً خروج خورده؟
         const { data: exitByLoad } = await supabase.from("warehouse_exits")
             .select(fullExitQuery).eq("loading_order_id", loadingOrder.id).maybeSingle();
 
@@ -69,7 +78,7 @@ export const findExitOrLoadingOrder = async (searchNo) => {
         else loadingOrderRecord = loadingOrder;
     }
 
-    // 2. جستجو مستقیم با ID خروج (ویرایش/مشاهده)
+    // 2. جستجو مستقیم با ID خروج
     if (!exitRecord && !loadingOrderRecord && !isNaN(searchNo)) {
         const { data: exitById } = await supabase.from("warehouse_exits")
             .select(fullExitQuery).eq("id", searchNo).maybeSingle();
@@ -83,17 +92,16 @@ export const findExitOrLoadingOrder = async (searchNo) => {
     if (exitRecord) {
         targetItems = exitRecord.warehouse_exit_items;
     } else {
-        // اگر سند جدید است، آیتم‌های لودینگ را فچ کن
         const { data: loadItems } = await supabase.from("loading_order_items")
             .select(`*, loading_orders!inner(id), products(id, name, effective_storage_cost, effective_loading_cost, product_categories!fk_prod_to_cat(fee_type)), clearance_items(weight, created_at)`)
             .eq("loading_order_id", loadingOrderRecord.id);
         targetItems = loadItems || [];
     }
 
-    // --- دریافت تاریخ‌ها (با تابع کمکی) ---
+    // --- دریافت تاریخ‌ها ---
     const productReceiptDates = await fetchProductEntryDates(targetItems);
 
-    // --- تابع مپ کردن ---
+    // --- مپ کردن آیتم‌ها ---
     const mapItems = (sourceItems, isNew = false) => {
         return sourceItems.map(item => {
             const ref = isNew ? item : item.loading_order_items;
@@ -101,19 +109,14 @@ export const findExitOrLoadingOrder = async (searchNo) => {
 
             const product = ref.products;
             const clearance = ref.clearance_items;
-
-            // اولویت تاریخ: 1. رسید 2. کلیرانس 3. امروز
             const entryDate = productReceiptDates[product?.id] || clearance?.created_at || new Date().toISOString();
 
             const wFull = isNew ? 0 : (item.weight_full || 0);
             const wEmpty = isNew ? 0 : (item.weight_empty || 0);
             const wNet = (wFull >= wEmpty) ? (wFull - wEmpty) : 0;
             const feeType = product?.product_categories?.fee_type || 'weight';
-
-            // اگر آیتم خروج است، qty خودش را دارد، اگر نه از لودینگ بگیر
             const qty = isNew ? (ref.qty || 0) : (item.qty || ref.qty || 0);
             const calcBase = feeType === 'quantity' ? Number(qty) : wNet;
-
             const sRate = Number(product?.effective_storage_cost) || 0;
             const lRate = Number(product?.effective_loading_cost) || 0;
 
@@ -122,7 +125,7 @@ export const findExitOrLoadingOrder = async (searchNo) => {
                 product_name: product?.name || "نامشخص",
                 batch_no: ref.batch_no,
                 qty: qty,
-                entry_date: entryDate, // تاریخ محاسبه شده
+                entry_date: entryDate,
                 fee_type: feeType,
                 base_storage_rate: sRate,
                 base_loading_rate: lRate,
@@ -136,14 +139,23 @@ export const findExitOrLoadingOrder = async (searchNo) => {
         });
     };
 
+    // --- ساخت خروجی ---
     if (exitRecord) {
+        // نام و آیدی مشتری را از ریلیشن‌ها می‌کشیم
+        const relCustomer = exitRecord.loading_orders?.clearances?.customers;
+        const relClearance = exitRecord.loading_orders?.clearances;
+
         return {
             source: 'exit_record', is_processed: true, status: exitRecord.status,
             exit_id: exitRecord.id, loading_id: exitRecord.loading_order_id,
             order_no: exitRecord.loading_orders?.order_no,
-            driver_name: exitRecord.loading_orders?.driver_name,
-            plate_number: exitRecord.loading_orders?.plate_number,
-            customer_name: exitRecord.loading_orders?.clearances?.customers?.name,
+            driver_name: exitRecord.driver_name || exitRecord.loading_orders?.driver_name,
+            plate_number: exitRecord.plate_number || exitRecord.loading_orders?.plate_number,
+
+            // ✅ اصلاح: دریافت نام و آیدی مشتری
+            customer_name: relCustomer?.name || "نامشخص",
+            customer_id: exitRecord.owner_id || relClearance?.customer_id,
+
             driver_national_code: exitRecord.driver_national_code,
             weighbridge_fee: exitRecord.weighbridge_fee, extra_fee: exitRecord.extra_fee,
             extra_description: exitRecord.extra_description, payment_method: exitRecord.payment_method,
@@ -152,64 +164,91 @@ export const findExitOrLoadingOrder = async (searchNo) => {
             items: mapItems(exitRecord.warehouse_exit_items, false)
         };
     } else {
-        const info = targetItems[0];
+        // حالت بارگیری جدید
+        const relCustomer = loadingOrderRecord.clearances?.customers;
+        const relClearance = loadingOrderRecord.clearances;
+
         return {
             source: 'loading_order', is_processed: false,
-            loading_id: info.loading_orders.id, order_no: info.loading_orders.order_no,
-            driver_name: info.loading_orders.driver_name, plate_number: info.loading_orders.plate_number,
-            customer_name: info.loading_orders.clearances?.customers?.name,
+            loading_id: loadingOrderRecord.id,
+            order_no: loadingOrderRecord.order_no,
+            driver_name: loadingOrderRecord.driver_name,
+            plate_number: loadingOrderRecord.plate_number,
+
+            // ✅ اصلاح: دریافت نام و آیدی مشتری برای فرانت
+            customer_name: relCustomer?.name || "نامشخص",
+            customer_id: relClearance?.customer_id,
+
             items: mapItems(targetItems, true)
         };
     }
 };
 
 // --- 2. ثبت اطلاعات ---
+
 export const createExitPermit = async (payload) => {
+    console.log("🛠 Service received payload:", payload);
+
+    // ۱. ثبت هدر خروج
     const { data: header, error: headErr } = await supabase.from("warehouse_exits").insert({
         loading_order_id: payload.loading_order_id,
+        owner_id: payload.owner_id,
+        driver_name: payload.driver_name,
+        plate_number: payload.plate_number,
         exit_date: payload.exit_date,
         reference_no: payload.reference_no,
         driver_national_code: payload.driver_national_code,
-        weighbridge_fee: payload.weighbridge_fee,
-        extra_fee: payload.extra_fee,
+        weighbridge_fee: Number(payload.weighbridge_fee) || 0,
+        extra_fee: Number(payload.extra_fee) || 0,
         extra_description: payload.extra_description,
-        vat_fee: payload.vat_fee,
-        total_fee: payload.total_fee,
-        total_loading_fee: payload.total_loading_fee,
+        vat_fee: Number(payload.vat_fee) || 0,
+        total_fee: Number(payload.total_fee) || 0,
+        total_loading_fee: Number(payload.total_loading_fee) || 0,
         payment_method: payload.payment_method,
+
+        // ✅ فیلد حیاتی برای حسابداری: ذخیره آی‌دی بانک یا صندوق
+        financial_account_id: payload.financial_account_id ? Number(payload.financial_account_id) : null,
+
         status: payload.status,
         description: payload.status === 'draft' ? 'ثبت موقت' : 'ثبت نهایی'
     }).select().single();
 
-    if (headErr) throw headErr;
+    if (headErr) {
+        console.error("❌ Database Error (Header):", headErr);
+        throw headErr;
+    }
 
+    // ۲. آماده‌سازی و ثبت آیتم‌ها
     const itemsData = payload.items.map(item => ({
         warehouse_exit_id: header.id,
         loading_item_id: item.item_id,
-        weight_full: item.weight_full,
-        weight_empty: item.weight_empty,
-        weight_net: item.weight_net,
-        qty: item.qty,
+        weight_full: Number(item.weight_full) || 0,
+        weight_empty: Number(item.weight_empty) || 0,
+        weight_net: Number(item.weight_net) || 0,
+        qty: Number(item.qty) || 0,
         fee_type: item.fee_type,
-        fee_price: item.base_storage_rate,
-        loading_fee: item.row_loading_fee,
-        final_fee: item.row_storage_fee
+        fee_price: Number(item.base_storage_rate) || 0,
+        loading_fee: Number(item.row_loading_fee) || 0,
+        final_fee: Number(item.row_storage_fee) || 0
     }));
 
     const { error: itemsErr } = await supabase.from("warehouse_exit_items").insert(itemsData);
+
     if (itemsErr) {
+        console.error("❌ Database Error (Items):", itemsErr);
+        // Rollback دستی: اگر آیتم‌ها ثبت نشدند، هدر را پاک کن
         await supabase.from("warehouse_exits").delete().eq("id", header.id);
         throw itemsErr;
     }
-    return header;
-};
 
-// --- 3. دریافت اطلاعات برای چاپ (Print View) ---
+    return header;
+};// --- 3. دریافت اطلاعات برای چاپ (Print View) ---
 export const getExitDetailsForPrint = async (exitId) => {
     const { data, error } = await supabase
         .from("warehouse_exits")
         .select(`
             *,
+            customers ( name ),
             loading_orders (
                 order_no, driver_name, plate_number,
                 clearances ( customers ( name ) )
@@ -228,21 +267,15 @@ export const getExitDetailsForPrint = async (exitId) => {
 
     if (error) throw error;
 
-    // ✅ دریافت تاریخ‌ها برای پرینت
-    // اینجا هم باید تاریخ‌ها را بگیریم تا در پرینت درست نمایش داده شوند
     const productReceiptDates = await fetchProductEntryDates(data.warehouse_exit_items);
 
-    // مپ کردن آیتم‌ها برای دسترسی راحت‌تر در صفحه پرینت
     const formattedItems = data.warehouse_exit_items.map(item => {
         const product = item.loading_order_items?.products;
         const clearance = item.loading_order_items?.clearance_items;
-
-        // محاسبه تاریخ برای پرینت
         const entryDate = productReceiptDates[product?.id] || clearance?.created_at || new Date().toISOString();
 
-        // محاسبه مدت
         const start = new Date(entryDate);
-        const end = new Date(data.exit_date); // تاریخ خروج هدر
+        const end = new Date(data.exit_date);
         const diffTime = end - start;
         const diffDaysRaw = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
         const diffDays = diffDaysRaw >= 0 ? diffDaysRaw : 0;
@@ -253,31 +286,32 @@ export const getExitDetailsForPrint = async (exitId) => {
             ...item,
             product_name: product?.name || "نامشخص",
             batch_no: item.loading_order_items?.batch_no,
-            entry_date: entryDate, // تاریخ ورود
-            days_duration: diffDays, // تعداد روز
-            months_duration: months // تعداد ماه
+            entry_date: entryDate,
+            days_duration: diffDays,
+            months_duration: months
         };
     });
 
     return {
         ...data,
-        driver_name: data.loading_orders?.driver_name,
-        plate_number: data.loading_orders?.plate_number,
-        customer_name: data.loading_orders?.clearances?.customers?.name,
+        driver_name: data.driver_name || data.loading_orders?.driver_name,
+        plate_number: data.plate_number || data.loading_orders?.plate_number,
+        // اولویت با owner_id است، اگر نبود از ترخیص بخوان
+        customer_name: data.customers?.name || data.loading_orders?.clearances?.customers?.name,
         items: formattedItems
     };
 };
 
-// --- 4. دریافت لیست کل خروج‌ها ---
+// --- 4. لیست خروج ---
 export const getExitsList = async () => {
     const { data, error } = await supabase
         .from("warehouse_exits")
         .select(`
             id, exit_date, status, created_at,
             total_fee, total_loading_fee, weighbridge_fee, extra_fee, vat_fee,
+            customers ( name ),
             loading_orders (
-                order_no, driver_name, plate_number,
-                clearances ( customers ( name ) )
+                order_no, driver_name, plate_number
             )
         `)
         .order('created_at', { ascending: false });
@@ -286,7 +320,7 @@ export const getExitsList = async () => {
     return data;
 };
 
-// --- 5. حذف سند خروج ---
+// --- 5. حذف ---
 export const deleteExit = async (id) => {
     const { error: itemsErr } = await supabase.from("warehouse_exit_items").delete().eq("warehouse_exit_id", id);
     if (itemsErr) throw itemsErr;
