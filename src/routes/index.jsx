@@ -56,7 +56,9 @@ import JournalReport from "../pages/Accounting/Reports/JournalReport";
 import CustomerBalance from "../pages/Accounting/Reports/CustomerBalance";
 import AccountLedger from "../pages/Accounting/Reports/AccountLedger";
 import ComprehensiveLedger from "../pages/Accounting/Reports/ComprehensiveLedger";
-
+//اجاره
+import WarehouseRentCreate from "../pages/WarehouseRent/WarehouseRentCreate";
+import WarehouseRentList from "../pages/WarehouseRent/WarehouseRentList";
 
 /* ✅ Treasury (خزانه‌داری - ماژول جدید) */
 import TreasuryForm from "../pages/Accounting/TreasuryForm";
@@ -152,7 +154,9 @@ const authProtectedRoutes = [
 
   // 4. تعاریف پایه (بانک و صندوق)
   { path: "/accounting/definitions", component: <TreasuryDefinitions /> },
-
+// اجاره
+  { path: "/rent/create", component: <WarehouseRentCreate /> },
+  { path: "/rent/list", component: <WarehouseRentList /> },
 
   /* Default Redirect */
   { path: "/", exact: true, component: <Navigate to="/dashboard" /> },

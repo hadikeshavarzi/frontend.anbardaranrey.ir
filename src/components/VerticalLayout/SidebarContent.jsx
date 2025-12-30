@@ -243,7 +243,19 @@ const SidebarContent = () => {
                   <li><Link to="/exit/list">لیست خروج‌ها</Link></li>
                 </ul>
               </li>
-
+              {/* ================================================== */}
+              <li className="menu-title">مدیریت اجاره</li>
+              {/* ================================================== */}
+              <li>
+                <Link to="/#" className="has-arrow">
+                  <i className="bx bx-building-house"></i>
+                  <span>قراردادهای اجاره</span>
+                </Link>
+                <ul className="sub-menu">
+                  <li><Link to="/rent/create">ثبت قرارداد جدید</Link></li>
+                  <li><Link to="/rent/list">لیست اجاره‌ها</Link></li>
+                </ul>
+              </li>
               {/* ================================================== */}
               <li className="menu-title">امور مالی</li>
               {/* ================================================== */}

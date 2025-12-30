@@ -188,95 +188,66 @@ export const getCustomerBalances = async () => {
 // ==========================================
 // 5. گزارش جامع مرور حساب‌ها
 // ==========================================
+
+// گزارش جامع مرور حساب‌ها با قابلیت فیلتر تاریخ و Drill-down
+
+
+
+
+
 export const getComprehensiveLedger = async ({ startDate, endDate, moeinId, tafsiliId }) => {
-    // ✅ اگر تفصیلی بانک انتخاب شده، POS های متصل رو هم بیار
-    let allTafsiliIds = tafsiliId ? [tafsiliId] : null;
-
-    if (tafsiliId) {
-        const { data: bankInfo } = await supabase
-            .from('treasury_banks')
-            .select('id')
-            .eq('tafsili_id', tafsiliId)
-            .maybeSingle();
-
-        if (bankInfo) {
-            const { data: posDevices } = await supabase
-                .from('treasury_pos')
-                .select('tafsili_id')
-                .eq('bank_id', bankInfo.id);
-
-            if (posDevices && posDevices.length > 0) {
-                const posTafsiliIds = posDevices.map(p => p.tafsili_id).filter(Boolean);
-                allTafsiliIds = [tafsiliId, ...posTafsiliIds];
+    try {
+        // ۱. جمع‌آوری آی‌دی‌های تفصیلی (بانک + POS)
+        let allTafsiliIds = tafsiliId ? [tafsiliId] : null;
+        if (tafsiliId) {
+            const { data: bankInfo } = await supabase.from('treasury_banks').select('id').eq('tafsili_id', tafsiliId).maybeSingle();
+            if (bankInfo) {
+                const { data: pos } = await supabase.from('treasury_pos').select('tafsili_id').eq('bank_id', bankInfo.id);
+                if (pos) allTafsiliIds = [tafsiliId, ...pos.map(p => p.tafsili_id).filter(Boolean)];
             }
         }
+
+        // ۲. کوئری مستقیم با فیلتر تاریخ
+        let query = supabase
+            .from('financial_entries')
+            .select(`
+                id, description, bed, bes, tafsili_id, moein_id,
+                financial_documents!inner ( id, doc_date, manual_no ),
+                accounting_moein ( id, code, title ),
+                accounting_tafsili ( id, code, title )
+            `);
+
+        if (moeinId) query = query.eq('moein_id', moeinId);
+        if (allTafsiliIds) query = query.in('tafsili_id', allTafsiliIds);
+
+        // فیلتر تاریخ
+        if (startDate) query = query.gte('financial_documents.doc_date', startDate.slice(0, 10));
+        if (endDate) query = query.lte('financial_documents.doc_date', endDate.slice(0, 10));
+
+        const { data, error } = await query;
+        if (error) throw error;
+
+        // ۳. تبدیل دیتا به فرمت تخت (Flatten) برای جلوگیری از خالی ماندن ستون‌ها
+        return (data || []).map(item => ({
+            id: item.id,
+            doc_id: item.financial_documents?.id,
+            doc_date: item.financial_documents?.doc_date,
+            description: item.description,
+            bed: Number(item.bed || 0),
+            bes: Number(item.bes || 0),
+            moein_title: item.accounting_moein?.title || 'نامشخص',
+            tafsili_title: item.accounting_tafsili?.title || '-',
+            tafsili_id: item.tafsili_id
+        })).sort((a, b) => new Date(a.doc_date) - new Date(b.doc_date) || a.doc_id - b.doc_id);
+
+    } catch (err) {
+        console.error("Ledger Service Error:", err);
+        throw err;
     }
-
-    // ✅ ابتدا لیست doc_id های مربوط به بازه تاریخی رو بگیر
-    let docIds = null;
-    if (startDate || endDate) {
-        let docQuery = supabase.from('financial_documents').select('id');
-
-        if (startDate) {
-            const formattedStart = startDate.length === 10 ? startDate : startDate.slice(0, 10);
-            docQuery = docQuery.gte('doc_date', formattedStart);
-        }
-        if (endDate) {
-            const formattedEnd = endDate.length === 10 ? endDate : endDate.slice(0, 10);
-            docQuery = docQuery.lte('doc_date', formattedEnd);
-        }
-
-        const { data: docs } = await docQuery;
-        docIds = (docs || []).map(d => d.id);
-
-        // اگر هیچ سندی در این بازه نبود، آرایه خالی برگردون
-        if (docIds.length === 0) {
-            return [];
-        }
-    }
-
-    let query = supabase
-        .from('financial_entries')
-        .select(`
-            id, description, bed, bes, tafsili_id, doc_id,
-            document:financial_documents ( id, doc_date, manual_no ),
-            moein:accounting_moein ( id, code, title ),
-            tafsili:accounting_tafsili ( id, code, title )
-        `);
-
-    // فیلتر معین
-    if (moeinId) {
-        query = query.eq('moein_id', moeinId);
-    }
-
-    // ✅ فیلتر تفصیلی (شامل POS های متصل)
-    if (allTafsiliIds && allTafsiliIds.length > 0) {
-        query = query.in('tafsili_id', allTafsiliIds);
-    }
-
-    // ✅ فیلتر تاریخ با doc_id
-    if (docIds && docIds.length > 0) {
-        query = query.in('doc_id', docIds);
-    }
-
-    const { data, error } = await query;
-    if (error) {
-        console.error("Error in getComprehensiveLedger:", error);
-        throw error;
-    }
-
-    return (data || []).sort((a, b) => {
-        const dateA = new Date(a.document?.doc_date || 0);
-        const dateB = new Date(b.document?.doc_date || 0);
-        if (dateA < dateB) return -1;
-        if (dateA > dateB) return 1;
-        return (a.document?.id || 0) - (b.document?.id || 0);
-    });
 };
 
-// ==========================================
-// 6. گزارش موجودی بانک‌ها و POS (با ترکیب)
-// ==========================================
+
+
 export const getBankBalances = async () => {
     try {
         // ۱. دریافت لیست بانک‌ها
