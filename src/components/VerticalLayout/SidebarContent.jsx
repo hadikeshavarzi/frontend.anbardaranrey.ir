@@ -1,320 +1,190 @@
+import React, { useEffect, useRef, useCallback, useState } from "react";
 import PropTypes from "prop-types";
-import React, { useEffect, useRef, useCallback } from "react";
-
-// Scrollbar
-import SimpleBar from "simplebar-react";
-
-// MetisMenu
-import MetisMenu from "metismenujs";
-
-// Router
 import { Link, useLocation } from "react-router-dom";
-
-// i18n
+import SimpleBar from "simplebar-react";
+import MetisMenu from "metismenujs";
 import { withTranslation } from "react-i18next";
-import withRouter from "../Common/withRouter";
 
-const SidebarContent = () => {
+// دیتا
+import { sidebarData } from "./SidebarData";
+
+const SidebarContent = (props) => {
   const ref = useRef();
-  const path = useLocation();
+  const menuRef = useRef(null);
+  const location = useLocation();
+  const [menuItems, setMenuItems] = useState([]);
 
-  const activateParentDropdown = useCallback((item) => {
-    item.classList.add("active");
-    const parent = item.parentElement;
-    const parent2El = parent.childNodes[1];
+  // ==========================================
+  // ۱. استخراج و اصلاح اطلاعات کاربر
+  // ==========================================
+  const getUserData = useCallback(() => {
+    try {
+      const stored = localStorage.getItem("user");
+      if (!stored) return null;
+      const user = JSON.parse(stored);
 
-    if (parent2El && parent2El.id !== "side-menu") {
-      parent2El.classList.add("mm-show");
-    }
+      // تشخیص دقیق نقش (Role)
+      const role = user.role || user.member_details?.role;
 
-    if (parent) {
-      parent.classList.add("mm-active");
-      const parent2 = parent.parentElement;
-
-      if (parent2) {
-        parent2.classList.add("mm-show");
-        const parent3 = parent2.parentElement;
-
-        if (parent3) {
-          parent3.classList.add("mm-active");
-          parent3.childNodes[0].classList.add("mm-active");
-          const parent4 = parent3.parentElement;
-          if (parent4) {
-            parent4.classList.add("mm-show");
-            const parent5 = parent4.parentElement;
-            if (parent5) {
-              parent5.classList.add("mm-show");
-              parent5.childNodes[0].classList.add("mm-active");
-            }
-          }
+      // گرفتن پرمیشن‌ها و تبدیل از String به Array در صورت نیاز
+      let perms = user.permissions || user.member_details?.permissions || [];
+      if (typeof perms === 'string') {
+        try {
+          perms = JSON.parse(perms);
+        } catch (e) {
+          // اگر فرمت JSON نبود، پاکسازی و تبدیل دستی
+          perms = perms.replace(/[\[\]"]/g, '').split(',').map(p => p.trim());
         }
       }
-      scrollElement(item);
+
+      return {
+        role: role,
+        permissions: Array.isArray(perms) ? perms : []
+      };
+    } catch (e) {
+      console.error("Sidebar Error parsing user data:", e);
+      return null;
     }
   }, []);
 
-  const removeActivation = (items) => {
-    for (let i = 0; i < items.length; ++i) {
-      const item = items[i];
-      const parent = item.parentElement;
+  // ==========================================
+  // ۲. تابع بررسی دسترسی (Admin Priority)
+  // ==========================================
+  const hasAccess = useCallback((requiredPerm) => {
+    const user = getUserData();
+    if (!user) return false;
 
-      item.classList.remove("active");
-      if (!parent) continue;
+    // ✅ شرط طلایی: ادمین همه منوها را می‌بیند
+    if (user.role === 'admin') return true;
 
-      const parent2El = parent.childNodes?.length && parent.childNodes[1] ? parent.childNodes[1] : null;
+    // اگر آیتم عمومی بود
+    if (!requiredPerm) return true;
 
-      if (parent2El && parent2El.id !== "side-menu") {
-        parent2El.classList.remove("mm-show");
+    // بررسی پرمیشن برای سایر نقش‌ها
+    return user.permissions.includes(requiredPerm);
+  }, [getUserData]);
+
+  // ==========================================
+  // ۳. فیلتر کردن هوشمند آیتم‌های منو
+  // ==========================================
+  useEffect(() => {
+    const filtered = sidebarData.map((item) => {
+      // الف) بررسی هدرها
+      if (item.isHeader) {
+        return hasAccess(item.permission) ? item : null;
       }
 
-      parent.classList.remove("mm-active");
+      // ب) بررسی منوهای دارای زیرمنو (SubItems)
+      if (item.subItems) {
+        const visibleSubItems = item.subItems.filter((sub) => hasAccess(sub.permission));
+
+        // اگر زیرمنو داشت اما هیچ‌کدام مجاز نبود، کل منو را حذف کن
+        if (visibleSubItems.length === 0) return null;
+
+        return { ...item, subItems: visibleSubItems };
+      }
+
+      // ج) منوهای تکی ساده
+      return hasAccess(item.permission) ? item : null;
+    }).filter(Boolean); // حذف موارد null
+
+    setMenuItems(filtered);
+  }, [hasAccess]);
+
+  // ==========================================
+  // ۴. مدیریت MetisMenu و استیت‌های فعال
+  // ==========================================
+  useEffect(() => {
+    if (menuItems.length > 0) {
+      const initMenu = () => {
+        // ریست کردن متیس‌منو برای جلوگیری از تداخل
+        if (menuRef.current) {
+          try { menuRef.current.dispose(); } catch (e) {}
+        }
+
+        const ul = document.getElementById("side-menu");
+        if (ul) {
+          menuRef.current = new MetisMenu("#side-menu");
+          activeMenu();
+        }
+      };
+
+      const timer = setTimeout(initMenu, 200);
+      return () => {
+        clearTimeout(timer);
+        if (menuRef.current) menuRef.current.dispose();
+      };
+    }
+  }, [menuItems, location.pathname]);
+
+  const activeMenu = useCallback(() => {
+    const pathName = location.pathname;
+    const ul = document.getElementById("side-menu");
+    if (!ul) return;
+    const items = ul.getElementsByTagName("a");
+    for (let i = 0; i < items.length; ++i) {
+      if (pathName === items[i].pathname) {
+        activateParentDropdown(items[i]);
+        break;
+      }
+    }
+  }, [location.pathname]);
+
+  const activateParentDropdown = (item) => {
+    item.classList.add("active");
+    const parent = item.parentElement;
+    if (parent) {
+      parent.classList.add("mm-active");
       const parent2 = parent.parentElement;
-
-      if (parent2) {
-        parent2.classList.remove("mm-show");
+      if (parent2 && parent2.id !== "side-menu") {
+        parent2.classList.add("mm-show");
         const parent3 = parent2.parentElement;
-
         if (parent3) {
-          parent3.classList.remove("mm-active");
-          parent3.childNodes[0].classList.remove("mm-active");
-          const parent4 = parent3.parentElement;
-
-          if (parent4) {
-            parent4.classList.remove("mm-show");
-            const parent5 = parent4.parentElement;
-
-            if (parent5) {
-              parent5.classList.remove("mm-show");
-              parent5.childNodes[0].classList.remove("mm-active");
-            }
-          }
+          parent3.classList.add("mm-active");
+          const childAnchor = parent3.querySelector("a.has-arrow");
+          if (childAnchor) childAnchor.classList.add("mm-active");
         }
       }
     }
   };
 
-  const activeMenu = useCallback(() => {
-    const pathName = path.pathname;
-    let matchingMenuItem = null;
-
-    const ul = document.getElementById("side-menu");
-    const items = ul.getElementsByTagName("a");
-
-    removeActivation(items);
-
-    for (let i = 0; i < items.length; i++) {
-      if (pathName === items[i].pathname) {
-        matchingMenuItem = items[i];
-        break;
-      }
-    }
-
-    if (matchingMenuItem) activateParentDropdown(matchingMenuItem);
-  }, [path.pathname, activateParentDropdown]);
-
-  useEffect(() => {
-    ref.current.recalculate();
-  }, []);
-
-  useEffect(() => {
-    new MetisMenu("#side-menu");
-    activeMenu();
-  }, []);
-
-  useEffect(() => {
-    activeMenu();
-  }, [activeMenu]);
-
-  function scrollElement(item) {
-    if (item) {
-      const currentPosition = item.offsetTop;
-      if (currentPosition > window.innerHeight) {
-        ref.current.getScrollElement().scrollTop = currentPosition - 300;
-      }
-    }
-  }
+  const getLabel = (label) => props.t ? props.t(label) || label : label;
 
   return (
       <React.Fragment>
         <SimpleBar className="h-100" ref={ref}>
           <div id="sidebar-menu">
             <ul className="metismenu list-unstyled" id="side-menu">
-
-              {/* ================================================== */}
-              <li className="menu-title">داشبورد</li>
-              {/* ================================================== */}
-              <li>
-                <Link to="/dashboard">
-                  <i className="bx bx-home-circle"></i>
-                  <span>صفحه اصلی</span>
-                </Link>
-              </li>
-
-              {/* ================================================== */}
-              <li className="menu-title">اطلاعات پایه</li>
-              {/* ================================================== */}
-
-              {/* مدیریت اعضا */}
-              <li>
-                <Link to="/#" className="has-arrow">
-                  <i className="bx bx-user-pin"></i>
-                  <span>مدیریت اعضا</span>
-                </Link>
-                <ul className="sub-menu">
-                  <li><Link to="/members/add">ثبت عضو جدید</Link></li>
-                  <li><Link to="/members/list">لیست اعضا</Link></li>
-                </ul>
-              </li>
-
-              {/* مشتریان */}
-              <li>
-                <Link to="/#" className="has-arrow">
-                  <i className="bx bx-group"></i>
-                  <span>مشتریان</span>
-                </Link>
-                <ul className="sub-menu">
-                  <li><Link to="/customers/add">ثبت مشتری</Link></li>
-                  <li><Link to="/customers/list">لیست مشتریان</Link></li>
-                </ul>
-              </li>
-
-              {/* کالاها */}
-              <li>
-                <Link to="/#" className="has-arrow">
-                  <i className="bx bx-cube"></i>
-                  <span>کالا و انبار</span>
-                </Link>
-                <ul className="sub-menu">
-                  <li><Link to="/inventory/add-product">تعریف کالا</Link></li>
-                  <li><Link to="/inventory/product-list">لیست کالاها</Link></li>
-                  <li><Link to="/inventory/category-list">دسته‌بندی‌ها</Link></li>
-                  <li><Link to="/inventory/unit-list">واحدهای سنجش</Link></li>
-                </ul>
-              </li>
-
-              {/* ================================================== */}
-              <li className="menu-title">عملیات انبار</li>
-              {/* ================================================== */}
-
-              {/* رسید کالا (ورود) */}
-              <li>
-                <Link to="/#" className="has-arrow">
-                  <i className="bx bx-import"></i>
-                  <span>رسید کالا (ورود)</span>
-                </Link>
-                <ul className="sub-menu">
-                  <li><Link to="/receipt/form">ثبت رسید جدید</Link></li>
-                  <li><Link to="/receipt/list">لیست رسیدها</Link></li>
-                </ul>
-              </li>
-
-              {/* ترخیص کالا */}
-              <li>
-                <Link to="/#" className="has-arrow">
-                  <i className="bx bx-task"></i>
-                  <span>ترخیص کالا</span>
-                </Link>
-                <ul className="sub-menu">
-                  <li><Link to="/clearances/form">درخواست ترخیص</Link></li>
-                  <li><Link to="/clearances/report">کارتابل ترخیص</Link></li>
-                </ul>
-              </li>
-
-              {/* بارگیری */}
-              <li>
-                <Link to="/#" className="has-arrow">
-                  <i className="bx bx-truck"></i>
-                  <span>بارگیری</span>
-                </Link>
-                <ul className="sub-menu">
-                  <li><Link to="/loading/create">صدور دستور بارگیری</Link></li>
-                  <li><Link to="/loading/list">لیست دستورها</Link></li>
-                </ul>
-              </li>
-
-              {/* خروج و باسکول */}
-              <li>
-                <Link to="/#" className="has-arrow">
-                  <i className="bx bx-exit"></i>
-                  <span>خروج و باسکول</span>
-                </Link>
-                <ul className="sub-menu">
-                  <li><Link to="/exit/create">ثبت خروج نهایی</Link></li>
-                  <li><Link to="/exit/list">لیست خروج‌ها</Link></li>
-                </ul>
-              </li>
-              {/* ================================================== */}
-              <li className="menu-title">مدیریت اجاره</li>
-              {/* ================================================== */}
-              <li>
-                <Link to="/#" className="has-arrow">
-                  <i className="bx bx-building-house"></i>
-                  <span>قراردادهای اجاره</span>
-                </Link>
-                <ul className="sub-menu">
-                  <li><Link to="/rent/create">ثبت قرارداد جدید</Link></li>
-                  <li><Link to="/rent/list">لیست اجاره‌ها</Link></li>
-                </ul>
-              </li>
-              {/* ================================================== */}
-              <li className="menu-title">امور مالی</li>
-              {/* ================================================== */}
-
-              {/* 1. حسابداری */}
-              <li>
-                <Link to="/#" className="has-arrow">
-                  <i className="bx bx-file"></i>
-                  <span>حسابداری</span>
-                </Link>
-                <ul className="sub-menu">
-                  <li><Link to="/accounting/coding">مدیریت کدینگ (GL)</Link></li>
-                  <li><Link to="/accounting/documents">دفتر اسناد حسابداری</Link></li>
-                  <li><Link to="/accounting/new">ثبت سند دستی</Link></li>
-                </ul>
-              </li>
-
-              {/* 2. خزانه‌داری */}
-              <li>
-                <Link to="/#" className="has-arrow">
-                  <i className="bx bx-money"></i>
-                  <span>خزانه‌داری و چک</span>
-                </Link>
-                <ul className="sub-menu">
-                  <li><Link to="/accounting/treasury-form">دریافت و پرداخت جدید</Link></li>
-                  <li><Link to="/accounting/list">لیست اسناد خزانه</Link></li>
-                  <li><Link to="/accounting/check-operations">کارتابل چک‌ها</Link></li>
-                  <li><Link to="/accounting/definitions">تعاریف (بانک/صندوق)</Link></li>
-                </ul>
-              </li>
-
-              {/* ================================================== */}
-              <li className="menu-title">گزارش‌ها</li>
-              {/* ================================================== */}
-
-              <li>
-                <Link to="/#" className="has-arrow">
-                  <i className="bx bx-bar-chart-square"></i>
-                  <span>گزارشات مالی</span>
-                </Link>
-                <ul className="sub-menu">
-                  <li><Link to="/accounting/reports/journal">دفتر روزنامه</Link></li>
-                  <li><Link to="/accounting/reports/customers">مانده حساب مشتریان</Link></li>
-                  <li><Link to="/accounting/reports/comprehensive">مرور جامع حساب‌ها</Link></li>
-                  <li><Link to="/accounting/reports/ledger">گردش حساب (معین/تفصیلی)</Link></li>
-
-                </ul>
-              </li>
-
-              {/* ================================================== */}
-              <li className="menu-title">سیستم</li>
-              {/* ================================================== */}
-              <li>
-                <Link to="/settings">
-                  <i className="bx bx-cog"></i>
-                  <span>تنظیمات</span>
-                </Link>
-              </li>
-
+              {menuItems.map((item, index) => (
+                  <React.Fragment key={index}>
+                    {item.isHeader ? (
+                        <li className="menu-title">{getLabel(item.label)}</li>
+                    ) : item.subItems ? (
+                        <li>
+                          <Link to="/#" className="has-arrow waves-effect">
+                            <i className={item.icon}></i>
+                            <span>{getLabel(item.label)}</span>
+                          </Link>
+                          <ul className="sub-menu" aria-expanded="false">
+                            {item.subItems.map((sub, subIndex) => (
+                                <li key={subIndex}>
+                                  <Link to={sub.url} className="waves-effect">
+                                    {getLabel(sub.label)}
+                                  </Link>
+                                </li>
+                            ))}
+                          </ul>
+                        </li>
+                    ) : (
+                        <li>
+                          <Link to={item.url} className="waves-effect">
+                            <i className={item.icon}></i>
+                            <span>{getLabel(item.label)}</span>
+                          </Link>
+                        </li>
+                    )}
+                  </React.Fragment>
+              ))}
             </ul>
           </div>
         </SimpleBar>
@@ -327,4 +197,4 @@ SidebarContent.propTypes = {
   t: PropTypes.any,
 };
 
-export default withRouter(withTranslation()(SidebarContent));
+export default withTranslation()(SidebarContent);

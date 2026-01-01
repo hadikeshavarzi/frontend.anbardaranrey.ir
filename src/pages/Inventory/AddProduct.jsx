@@ -28,6 +28,9 @@ const AddProduct = () => {
     const [units, setUnits] = useState([]);
     const [categories, setCategories] = useState([]);
 
+    // ✅ دریافت اطلاعات کاربر لاگین شده برای انتساب مالکیت کالا به انباردار
+    const user = JSON.parse(localStorage.getItem("user") || "{}");
+
     /* ---------------------------------------------
        لود واحدها و دسته‌بندی‌ها
     --------------------------------------------- */
@@ -49,7 +52,7 @@ const AddProduct = () => {
                 const unitsList = (Array.isArray(unitsRes) ? unitsRes : unitsRes?.data || [])
                     .sort((a, b) => a.name.localeCompare(b.name, "fa"));
 
-                const catList = (catsRes?.data || [])
+                const catList = (Array.isArray(catsRes) ? catsRes : catsRes?.data || [])
                     .sort((a, b) => a.name.localeCompare(b.name, "fa"));
 
                 setUnits(unitsList);
@@ -64,9 +67,6 @@ const AddProduct = () => {
 
         loadData();
     }, []);
-
-
-
 
     /* ---------------------------------------------
        تنظیم Formik + Yup
@@ -120,12 +120,23 @@ const AddProduct = () => {
             console.log("📝 Creating new product with values:", values);
 
             try {
+                // ✅ استخراج آیدی کاربر و تبدیل به عدد (مهم برای دیتابیس)
+                const currentMemberId = user.id ? Number(user.id) : null;
+
+                if (!currentMemberId) {
+                    setError("خطای امنیتی: شناسه کاربر یافت نشد. لطفاً دوباره لاگین کنید.");
+                    setLoading(false);
+                    return;
+                }
+
                 // --- چک تکراری بودن SKU ---
                 const allProductsRes = await get("/products");
                 const allProducts = Array.isArray(allProductsRes)
                     ? allProductsRes
                     : allProductsRes?.data || [];
 
+                // فقط در کالاهای همین ممبر یا کل سیستم (بسته به سیاست شما) چک می کنیم
+                // اینجا فرض بر کل سیستم است اما در عمل SKU باید یونیک باشد
                 const exists = (allProducts || []).some(
                     (p) =>
                         (p.sku || "").trim().toLowerCase() ===
@@ -168,7 +179,10 @@ const AddProduct = () => {
                     specifications: values.specifications || null,
                     is_active: values.is_active,
                     notes: values.notes || null,
-                    // member_id را اگر لازم است سمت بک‌اند از توکن پر کن؛ اینجا ارسال نمی‌کنیم
+
+                    // ✅ ارسال member_id (انباردار) و owner_id (null چون کالا مشترک است)
+                    member_id: currentMemberId,
+                    owner_id: null
                 };
 
                 console.log("📦 Product payload:", payloadBody);
@@ -178,13 +192,15 @@ const AddProduct = () => {
                 // /products POST در بک‌اند فعلی: { data } یا { success, data }
                 const created = result?.data || result;
 
-                if (created?.id) {
-                    setSuccess("کالا با موفقیت ثبت شد");
+                // بررسی موفقیت (چک کردن وجود ID یا فیلد success)
+                if (created?.id || result.success) {
+                    setSuccess("کالا با موفقیت در انبار شما ثبت شد");
 
                     // بعد از چند لحظه فرم خالی شود (می‌توانی به لیست هم ریدایرکت کنی)
                     setTimeout(() => {
                         formik.resetForm();
                         setSuccess("");
+                        navigate("/inventory/product-list");
                     }, 2000);
                 } else {
                     console.warn("⚠️ Unexpected create response:", result);
@@ -192,7 +208,8 @@ const AddProduct = () => {
                 }
             } catch (err) {
                 console.error("❌ Create product error:", err);
-                setError(err.response?.data?.message || "خطا در ثبت کالا");
+                // نمایش پیام خطای دقیق سرور اگر موجود باشد
+                setError(err.response?.data?.message || err.message || "خطا در ثبت کالا");
             }
 
             setLoading(false);

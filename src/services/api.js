@@ -27,6 +27,7 @@ export async function apiGet(path, token) {
 }
 
 // ----------- Helper: ارسال درخواست POST -----------
+
 export async function apiPost(path, body, token) {
   try {
     const res = await fetch(`${API_BASE}${path}`, {
@@ -39,17 +40,21 @@ export async function apiPost(path, body, token) {
     });
 
     if (!res.ok) {
+      // 🟢 تغییر مهم: تلاش برای گرفتن جزئیات ارور از سرور
       const err = await res.json().catch(() => ({}));
-      throw new Error(err.error || err.message || `HTTP Error ${res.status}`);
+      console.error("🔴 Server Error Response:", err); // این لاگ را در کنسول ببینید
+
+      // اجازه دهید پیام واقعی ارور (مثلاً ارور دیتابیس) برگردد
+      throw new Error(err.error || err.message || `خطای سرور: ${res.status}`);
     }
 
     return res.json();
   } catch (error) {
     console.error("API POST Error:", error);
-    throw new Error("ارتباط با سرور برقرار نشد");
+    // 🟡 تغییر مهم: پیام واقعی را پرتاب کنید، نه پیام ثابت "ارتباط برقرار نشد"
+    throw error;
   }
 }
-
 // ----------- Helper: ارسال PUT -----------
 export async function apiPut(path, body, token) {
   try {

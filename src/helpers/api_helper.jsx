@@ -1,51 +1,38 @@
-/* =====================================================================================
-   📌 API Helper – FINAL + DEBUG (برای پیدا کردن PUT اشتباه)
-===================================================================================== */
-
 import axios from "axios";
 
 /* ------------------------------------------------------------------
-   🔗 Base URL from .env
+   🔗 تنظیم آدرس‌های پایه
 ------------------------------------------------------------------ */
-export const API_BASE = import.meta.env.VITE_API_BASE;
-export const MEDIA_BASE = import.meta.env.VITE_MEDIA_BASE;
+export const API_BASE = import.meta.env.VITE_API_BASE || "http://localhost:4000/api";
 
-if (!API_BASE) {
-    console.error("❌ VITE_API_BASE is missing in .env file");
-}
+// ✅ اضافه شد تا خطای ProfileMenu برطرف شود
+export const MEDIA_BASE = import.meta.env.VITE_MEDIA_BASE || API_BASE;
 
-/* ------------------------------------------------------------------
-   🔐 Axios Instance
------------------------------------------------------------------- */
+// ساخت نمونه Axios
 const axiosApi = axios.create({
     baseURL: API_BASE,
     timeout: 30000,
 });
 
 /* ------------------------------------------------------------------
-   🟦 Request Interceptor (LOG + TRACE)
+   🟦 اینترسپتور درخواست (Request Interceptor)
 ------------------------------------------------------------------ */
 axiosApi.interceptors.request.use(
     (config) => {
-        const token = localStorage.getItem("authToken");
+        const token = localStorage.getItem("token") || localStorage.getItem("authToken");
 
         if (token) {
             config.headers["Authorization"] = `Bearer ${token}`;
         }
 
-        const method = config.method?.toUpperCase();
-        const url = config.url;
+        // اطمینان از ارسال فرمت JSON
+        if (!config.headers["Content-Type"]) {
+            config.headers["Content-Type"] = "application/json";
+        }
 
-        /* ---------- LOG BASIC ---------- */
-        console.log(`📤 ${method} ${url}`);
-
-        /* ---------- 🔥 DEBUG PUT RECEIPTS ---------- */
-        if (method === "PUT" && url?.includes("/receipts/")) {
-            console.group("🚨🚨 DETECTED PUT /receipts 🚨🚨");
-            console.log("URL:", url);
-            console.log("DATA:", config.data);
-            console.trace("📍 CALL STACK (WHO CALLED THIS PUT?)");
-            console.groupEnd();
+        // لاگ در محیط توسعه
+        if (import.meta.env.MODE === "development") {
+            console.log(`📤 [${config.method?.toUpperCase()}] Sending to: ${config.url}`);
         }
 
         return config;
@@ -54,33 +41,35 @@ axiosApi.interceptors.request.use(
 );
 
 /* ------------------------------------------------------------------
-   🟦 Response Interceptor (ERROR LOGGING)
+   🟦 اینترسپتور پاسخ (Response Interceptor)
 ------------------------------------------------------------------ */
 axiosApi.interceptors.response.use(
     (response) => {
-        const method = response.config.method?.toUpperCase();
-        const url = response.config.url;
-
-        console.log(`✅ ${method} ${url}`, response.status);
         return response;
     },
     (error) => {
         const status = error.response?.status;
+        const data = error.response?.data;
         const url = error.config?.url;
-        const method = error.config?.method?.toUpperCase();
 
-        console.group("❌ API RESPONSE ERROR");
-        console.error("METHOD:", method);
+        // 🚨 نمایش دقیق خطا در کنسول (بسیار مهم برای دیباگ)
+        console.group("❌ API ERROR DETAILS");
         console.error("URL:", url);
         console.error("STATUS:", status);
-        console.error("DATA:", error.response?.data);
+        console.error("MESSAGE:", data?.message || data?.error || "خطای ناشناخته");
+        console.error("FULL DATA:", data);
         console.groupEnd();
 
-        // 🔐 اگر توکن منقضی شد
+        // 🔐 مدیریت خطای ۴۰۱
         if (status === 401) {
-            localStorage.removeItem("authToken");
-            localStorage.removeItem("user");
-            window.location.href = "/login";
+            /* 🔴 تغییر مهم برای دیباگ:
+               این خط پایین را موقتاً کامنت کردم تا وقتی دیتابیس ارور دسترسی می‌دهد
+               شما را از سیستم بیرون ناندازد و بتوانید ارور را بخوانید.
+            */
+
+            // window.location.href = "/login"; // <--- فعلاً غیرفعال برای دیدن ارور RLS
+
+            console.warn("⚠️ خطای ۴۰۱ دریافت شد. ریدایرکت موقتاً غیرفعال است.");
         }
 
         return Promise.reject(error);
@@ -88,7 +77,7 @@ axiosApi.interceptors.response.use(
 );
 
 /* =====================================================================================
-   📌 CRUD Methods
+   📌 متدهای اصلی CRUD
 ===================================================================================== */
 
 export const get = (url, config = {}) =>
@@ -107,7 +96,7 @@ export const del = (url, config = {}) =>
     axiosApi.delete(url, config).then((res) => res.data);
 
 /* =====================================================================================
-   🔥 OTP APIs (NO TOKEN)
+   🔥 متدهای احراز هویت (OTP)
 ===================================================================================== */
 
 export async function requestOtp(mobile) {
@@ -119,8 +108,10 @@ export async function verifyOtp(mobile, otp) {
     const res = await axios.post(`${API_BASE}/auth/verify-otp`, { mobile, otp });
 
     if (res.data?.token) {
-        localStorage.setItem("authToken", res.data.token);
-        localStorage.setItem("user", JSON.stringify(res.data.user));
+        localStorage.setItem("token", res.data.token);
+        if (res.data.user) {
+            localStorage.setItem("user", JSON.stringify(res.data.user));
+        }
     }
 
     return res.data;

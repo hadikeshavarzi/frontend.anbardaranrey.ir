@@ -1,19 +1,11 @@
 import React, { useEffect, useState } from "react";
 import {
-    Container,
-    Row,
-    Col,
-    Card,
-    CardBody,
-    Table,
-    Button,
-    Spinner,
-    Alert,
-    Badge,
-    Input,
+    Container, Row, Col, Card, CardBody, Table, Button, Spinner, Alert, Badge, Input,
 } from "reactstrap";
 import { Link } from "react-router-dom";
-import { get, del } from "../../helpers/api_helper.jsx";
+
+// سرویس اتصال به سرور Node.js
+import { getProducts, deleteProduct } from "../../services/inventoryService";
 
 const ProductList = () => {
     const [products, setProducts] = useState([]);
@@ -31,34 +23,18 @@ const ProductList = () => {
         setError("");
 
         try {
-            const res = await get("/products");
+            const data = await getProducts();
+            // اطمینان از اینکه دیتا آرایه است
+            const safeData = Array.isArray(data) ? data : (data.data || []);
 
-
-            // نتیجه می‌تواند آرایه یا {data: [...]} باشد
-            let rawList = Array.isArray(res)
-                ? res
-                : Array.isArray(res?.data)
-                    ? res.data
-                    : [];
-
-            // فقط رکوردهایی که واقعاً کالا هستند (SKU دارند) را نگه می‌داریم
-            let productList = rawList.filter((p) => !!(p.sku && String(p.sku).trim()));
-
-            // مرتب‌سازی الفبایی بر اساس نام
-            productList.sort((a, b) => {
-                const an = (a.name || "").toString();
-                const bn = (b.name || "").toString();
-                return an.localeCompare(bn, "fa");
-            });
-
-            setProducts(productList);
-            setFilteredProducts(productList);
+            setProducts(safeData);
+            setFilteredProducts(safeData);
         } catch (err) {
-
-            setError("خطا در دریافت لیست کالاها");
+            console.error(err);
+            setError(err.message || "خطا در دریافت لیست کالاها");
+        } finally {
+            setLoading(false);
         }
-
-        setLoading(false);
     };
 
     useEffect(() => {
@@ -77,14 +53,9 @@ const ProductList = () => {
         const lower = searchTerm.toLowerCase();
 
         const filtered = products.filter((p) => {
-            const categoryName =
-                p.category?.name ||
-                p.product_categories?.name ||
-                "";
-            const unitName =
-                p.unit?.name ||
-                p.product_units?.name ||
-                "";
+            // ✅ اصلاح ۱: استفاده از category و unit (نام‌های جدید سرور)
+            const categoryName = p.category?.name || "";
+            const unitName = p.unit?.name || "";
 
             return (
                 p.name?.toLowerCase().includes(lower) ||
@@ -105,7 +76,7 @@ const ProductList = () => {
         if (!window.confirm(`آیا از حذف "${name}" مطمئن هستید؟`)) return;
 
         try {
-            await del(`/products/${id}`);
+            await deleteProduct(id);
 
             setProducts((prev) => prev.filter((p) => p.id !== id));
             setFilteredProducts((prev) => prev.filter((p) => p.id !== id));
@@ -113,41 +84,28 @@ const ProductList = () => {
             setSuccess(`کالا "${name}" حذف شد.`);
             setTimeout(() => setSuccess(""), 2500);
         } catch (err) {
-         
-
-            if (err.response?.status === 409) {
-                setError("این کالا دارای تراکنش مرتبط است و قابل حذف نیست.");
+            console.error(err);
+            if (err.message && err.message.includes("violates foreign key")) {
+                setError("این کالا در سیستم استفاده شده و قابل حذف نیست.");
             } else {
-                setError("خطا در حذف کالا");
+                setError("خطا در حذف کالا: " + err.message);
             }
         }
     };
 
     /* -------------------------------------------------
-       Helpers
+       Helpers (توابع اصلاح شده)
     ------------------------------------------------- */
-    const formatPrice = (price) =>
-        price ? new Intl.NumberFormat("fa-IR").format(price) + " تومان" : "-";
 
-    const renderStockBadge = (product) => {
-        const min = product.min_stock || 0;
-
-        return (
-            <Badge color="warning" className="badge-soft-warning">
-                حداقل موجودی: {min}
-            </Badge>
-        );
+    // ✅ اصلاح ۲: دریافت نام دسته از فیلد category
+    const getCategoryName = (product) => {
+        return product.category?.name || "-";
     };
 
-    const getCategoryName = (product) =>
-        product.category?.name ||
-        product.product_categories?.name ||
-        "-";
-
-    const getUnitName = (product) =>
-        product.unit?.name ||
-        product.product_units?.name ||
-        "-";
+    // ✅ اصلاح ۳: دریافت نام واحد از فیلد unit
+    const getUnitName = (product) => {
+        return product.unit?.name || "-";
+    };
 
     /* -------------------------------------------------
        UI
@@ -158,7 +116,7 @@ const ProductList = () => {
                 <Container fluid>
                     {/* عنوان صفحه */}
                     <div className="page-title-box d-sm-flex align-items-center justify-content-between">
-                        <h4 className="mb-sm-0 font-size-18">کالاها</h4>
+                        <h4 className="mb-sm-0 font-size-18">مدیریت کالاها</h4>
                         <div className="page-title-right">
                             <ol className="breadcrumb m-0">
                                 <li className="breadcrumb-item">
@@ -176,9 +134,9 @@ const ProductList = () => {
                                     {/* Header */}
                                     <div className="d-flex flex-wrap align-items-center justify-content-between mb-4">
                                         <div>
-                                            <h4 className="card-title mb-1">لیست کالاها</h4>
-                                            <p className="card-title-desc mb-0">
-                                                مدیریت کالاها و دسته‌بندی آنها
+                                            <h4 className="card-title mb-1">انبار محصولات</h4>
+                                            <p className="card-title-desc mb-0 text-muted">
+                                                لیست کالاهای اختصاصی شما
                                             </p>
                                         </div>
 
@@ -188,81 +146,44 @@ const ProductList = () => {
                                                 onClick={loadProducts}
                                                 disabled={loading}
                                             >
-                                                <i className="bx bx-refresh me-1"></i>
+                                                <i className={`bx bx-refresh me-1 ${loading ? "bx-spin" : ""}`}></i>
                                                 بروزرسانی
                                             </Button>
 
                                             <Link
                                                 to="/inventory/add-product"
-                                                className="btn btn-success"
+                                                className="btn btn-primary"
                                             >
-                                                <i className="bx bx-plus-circle me-1"></i>
+                                                <i className="bx bx-plus me-1"></i>
                                                 افزودن کالای جدید
                                             </Link>
                                         </div>
                                     </div>
 
                                     {/* Alerts */}
-                                    {error && (
-                                        <Alert
-                                            color="danger"
-                                            className="alert-dismissible fade show"
-                                        >
-                                            {error}
-                                            <button
-                                                type="button"
-                                                className="btn-close"
-                                                onClick={() => setError("")}
-                                            ></button>
-                                        </Alert>
-                                    )}
-
-                                    {success && (
-                                        <Alert
-                                            color="success"
-                                            className="alert-dismissible fade show"
-                                        >
-                                            {success}
-                                            <button
-                                                type="button"
-                                                className="btn-close"
-                                                onClick={() => setSuccess("")}
-                                            ></button>
-                                        </Alert>
-                                    )}
+                                    {error && <Alert color="danger" toggle={() => setError("")}>{error}</Alert>}
+                                    {success && <Alert color="success" toggle={() => setSuccess("")}>{success}</Alert>}
 
                                     {/* Search */}
                                     {!loading && products.length > 0 && (
                                         <Row className="mb-3">
-                                            <Col md={6}>
+                                            <Col md={5}>
                                                 <div className="search-box">
                                                     <div className="position-relative">
                                                         <Input
                                                             type="text"
-                                                            className="form-control"
-                                                            placeholder="جستجو بر اساس نام، کد، بارکد، دسته یا واحد..."
+                                                            className="form-control rounded-pill"
+                                                            placeholder="جستجو (نام، کد، دسته...)"
                                                             value={searchTerm}
-                                                            onChange={(e) =>
-                                                                setSearchTerm(e.target.value)
-                                                            }
+                                                            onChange={(e) => setSearchTerm(e.target.value)}
                                                         />
                                                         <i className="bx bx-search-alt search-icon"></i>
                                                     </div>
                                                 </div>
                                             </Col>
-
-                                            <Col md={6} className="text-end">
-                                                <div className="text-muted">
-                                                    تعداد کل: <strong>{products.length}</strong> کالا
-                                                    {searchTerm && (
-                                                        <>
-                                                            {" "}
-                                                            | نتایج:{" "}
-                                                            <strong>
-                                                                {filteredProducts.length}
-                                                            </strong>
-                                                        </>
-                                                    )}
+                                            <Col md={7} className="text-end align-self-center">
+                                                <div className="text-muted font-size-12">
+                                                    تعداد کل: <strong>{products.length}</strong>
                                                 </div>
                                             </Col>
                                         </Row>
@@ -271,28 +192,29 @@ const ProductList = () => {
                                     {/* Table */}
                                     {loading ? (
                                         <div className="text-center py-5">
-                                            <Spinner />
-                                            <h5 className="mt-3 text-muted">
-                                                در حال بارگذاری...
-                                            </h5>
+                                            <Spinner color="primary" type="grow" />
+                                            <h5 className="mt-3 text-muted">در حال دریافت اطلاعات...</h5>
                                         </div>
                                     ) : filteredProducts.length === 0 ? (
                                         <div className="text-center py-5">
+                                            <div className="avatar-md mx-auto mb-3">
+                                                <span className="avatar-title rounded-circle bg-light text-secondary font-size-24">
+                                                    <i className="bx bx-box"></i>
+                                                </span>
+                                            </div>
                                             <h5 className="text-muted">کالایی یافت نشد</h5>
                                         </div>
                                     ) : (
                                         <div className="table-responsive">
-                                            <Table className="table table-hover align-middle">
+                                            <Table className="table table-hover align-middle table-nowrap">
                                                 <thead className="table-light">
                                                 <tr>
-                                                    <th>#</th>
-                                                    <th>نام کالا</th>
-                                                    <th>کد کالا</th>
+                                                    <th style={{width: '60px'}}>#</th>
+                                                    <th>مشخصات کالا</th>
+                                                    <th>SKU / کد</th>
                                                     <th>دسته</th>
                                                     <th>واحد</th>
-                                                    <th>حداقل موجودی</th>
-                                                    <th>قیمت</th>
-                                                    <th>وضعیت</th>
+                                                    {/* ستون‌های قیمت و موجودی حذف شدند */}
                                                     <th>عملیات</th>
                                                 </tr>
                                                 </thead>
@@ -303,62 +225,46 @@ const ProductList = () => {
                                                         <td>{index + 1}</td>
 
                                                         <td>
-                                                            <strong>{product.name}</strong>
-                                                            <br />
+                                                            <h5 className="font-size-14 text-truncate mb-1">
+                                                                <Link to={`/inventory/edit-product/${product.id}`} className="text-dark fw-bold">
+                                                                    {product.name}
+                                                                </Link>
+                                                            </h5>
                                                             {product.barcode && (
                                                                 <small className="text-muted">
-                                                                    <i className="bx bx-barcode"></i>{" "}
+                                                                    <i className="bx bx-barcode me-1"></i>
                                                                     {product.barcode}
                                                                 </small>
                                                             )}
                                                         </td>
 
                                                         <td>
-                                                            <Badge
-                                                                pill
-                                                                color="info"
-                                                                className="badge-soft-info"
-                                                            >
+                                                            <Badge className="bg-light text-dark font-size-12 border">
                                                                 {product.sku}
                                                             </Badge>
                                                         </td>
 
+                                                        {/* نمایش نام دسته و واحد با کلیدهای جدید */}
                                                         <td>{getCategoryName(product)}</td>
                                                         <td>{getUnitName(product)}</td>
-
-                                                        <td>
-                                                            <Badge
-                                                                color="warning"
-                                                                className="badge-soft-warning"
-                                                            >
-                                                                {product.min_stock || 0}
-                                                            </Badge>
-                                                        </td>
-
-                                                        <td>{formatPrice(product.price)}</td>
-
-                                                        <td>{renderStockBadge(product)}</td>
 
                                                         <td>
                                                             <div className="d-flex gap-2">
                                                                 <Link
                                                                     to={`/inventory/edit-product/${product.id}`}
                                                                     className="btn btn-sm btn-soft-primary"
+                                                                    title="ویرایش"
                                                                 >
-                                                                    <i className="bx bx-edit-alt"></i>
+                                                                    <i className="bx bx-edit-alt font-size-15"></i>
                                                                 </Link>
 
                                                                 <Button
                                                                     size="sm"
                                                                     color="soft-danger"
-                                                                    onClick={() =>
-                                                                        handleDelete(
-                                                                            product.id,
-                                                                            product.name
-                                                                        )
-                                                                    }
+                                                                    onClick={() => handleDelete(product.id, product.name)}
+                                                                    title="حذف"
                                                                 >
-                                                                    <i className="bx bx-trash"></i>
+                                                                    <i className="bx bx-trash font-size-15"></i>
                                                                 </Button>
                                                             </div>
                                                         </td>

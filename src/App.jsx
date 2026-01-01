@@ -1,11 +1,14 @@
 import PropTypes from "prop-types";
-import React from "react";
+import React, { useEffect } from "react"; // ✅ useEffect اضافه شد
 
 import { Routes, Route } from "react-router-dom";
-import { connect } from "react-redux";
+import { connect, useDispatch } from "react-redux"; // ✅ useDispatch اضافه شد
 
 import { useSelector } from "react-redux";
 import { createSelector } from "reselect";
+
+// ✅ ایمپورت اکشن لاگین (مسیر را چک کنید، معمولا همین است)
+import { loginSuccess } from "./store/actions";
 
 // Import Routes all
 import { authProtectedRoutes, publicRoutes } from "./routes/index";
@@ -21,34 +24,42 @@ import NonAuthLayout from "./components/NonAuthLayout";
 // Import scss
 import "./assets/scss/theme.scss";
 
-// Import Firebase Configuration file
-// import { initFirebaseBackend } from "./helpers/firebase_helper"
-
 import fakeBackend from "/src/helpers/AuthType/fakeBackend";
 
 // Activating fake backend
 fakeBackend();
 
-// const firebaseConfig = {
-//   apiKey: import.meta.env.VITE_APP_APIKEY,
-//   authDomain: import.meta.env.VITE_APP_AUTHDOMAIN,
-//   databaseURL: import.meta.env.VITE_APP_DATABASEURL,
-//   projectId: import.meta.env.VITE_APP_PROJECTID,
-//   storageBucket: import.meta.env.VITE_APP_STORAGEBUCKET,
-//   messagingSenderId: import.meta.env.VITE_APP_MESSAGINGSENDERID,
-//   appId: import.meta.env.VITE_APP_APPID,
-//   measurementId: import.meta.env.VITE_APP_MEASUREMENTID,
-// };
-
-// init firebase backend
-// initFirebaseBackend(firebaseConfig)
-
 const App = (props) => {
+  const dispatch = useDispatch(); // ✅ تعریف دیسپچ
+
+  // =========================================================
+  // ✅ بخش جدید: بازیابی اطلاعات کاربر بعد از رفرش
+  // =========================================================
+  useEffect(() => {
+    // اطلاعاتی که در Login.jsx ذخیره کردیم را می‌خوانیم
+    const authUser = localStorage.getItem("authUser");
+    const user = localStorage.getItem("user");
+
+    if (authUser || user) {
+      try {
+        const userData = JSON.parse(authUser || user);
+        console.log("🔄 App: Restoring user session...", userData);
+
+        // اطلاعات را دوباره به ریداکس تزریق می‌کنیم تا سیستم بفهمد لاگین هستیم
+        dispatch(loginSuccess(userData));
+      } catch (error) {
+        console.error("Failed to parse user data:", error);
+      }
+    }
+  }, [dispatch]);
+  // =========================================================
+
+
   const LayoutProperties = createSelector(
-    (state) => state.Layout,
-    (layout) => ({
-      layoutType: layout.layoutType,
-    })
+      (state) => state.Layout,
+      (layout) => ({
+        layoutType: layout.layoutType,
+      })
   );
 
   const {
@@ -71,31 +82,31 @@ const App = (props) => {
   const Layout = getLayout(layoutType);
 
   return (
-    <React.Fragment>
-      <Routes>
-        {publicRoutes.map((route, idx) => (
-          <Route
-            path={route.path}
-            element={<NonAuthLayout>{route.component}</NonAuthLayout>}
-            key={idx}
-            exact={true}
-          />
-        ))}
+      <React.Fragment>
+        <Routes>
+          {publicRoutes.map((route, idx) => (
+              <Route
+                  path={route.path}
+                  element={<NonAuthLayout>{route.component}</NonAuthLayout>}
+                  key={idx}
+                  exact={true}
+              />
+          ))}
 
-        {authProtectedRoutes.map((route, idx) => (
-          <Route
-            path={route.path}
-            element={
-              <Authmiddleware>
-                <Layout>{route.component}</Layout>
-              </Authmiddleware>
-            }
-            key={idx}
-            exact={true}
-          />
-        ))}
-      </Routes>
-    </React.Fragment>
+          {authProtectedRoutes.map((route, idx) => (
+              <Route
+                  path={route.path}
+                  element={
+                    <Authmiddleware>
+                      <Layout>{route.component}</Layout>
+                    </Authmiddleware>
+                  }
+                  key={idx}
+                  exact={true}
+              />
+          ))}
+        </Routes>
+      </React.Fragment>
   );
 };
 

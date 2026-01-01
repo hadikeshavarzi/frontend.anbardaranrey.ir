@@ -12,38 +12,88 @@ import {
   FormFeedback,
   Spinner,
   Alert,
+  CardTitle
 } from "reactstrap";
 import { useFormik } from "formik";
 import * as Yup from "yup";
 import { useNavigate, useParams, Link } from "react-router-dom";
-import { get, patch } from "../../helpers/api_helper.jsx";
+import { supabase } from "../../helpers/supabase"; // ✅ اتصال مستقیم
 
 /**
- * تبدیل تاریخ ISO به فرمت input[type="date"] (YYYY-MM-DD)
+ * 📋 لیست جامع دسترسی‌های سیستم
+ */
+const ALL_PERMISSIONS = [
+  {
+    category: "📦 انبار و کالا",
+    items: [
+      { key: "inventory.view", label: "مشاهده لیست کالاها/واحدها" },
+      { key: "inventory.create", label: "تعریف و ویرایش کالا/دسته/واحد" },
+    ]
+  },
+  {
+    category: "📥 رسید کالا (ورود)",
+    items: [
+      { key: "receipt.view", label: "مشاهده لیست رسیدها" },
+      { key: "receipt.create", label: "ثبت رسید جدید" },
+      { key: "receipt.edit", label: "ویرایش رسیدها" },
+    ]
+  },
+  {
+    category: "🚚 بارگیری و خروج",
+    items: [
+      { key: "loading.view", label: "مشاهده لیست بارگیری" },
+      { key: "loading.create", label: "ثبت دستور بارگیری" },
+      { key: "exit.view", label: "مشاهده خروج و باسکول" },
+      { key: "exit.create", label: "ثبت خروج نهایی" },
+      { key: "clearance.view", label: "مشاهده مجوزهای ترخیص" },
+      { key: "clearance.create", label: "صدور مجوز ترخیص" },
+    ]
+  },
+  {
+    category: "👥 مشتریان",
+    items: [
+      { key: "customer.view", label: "مشاهده لیست مشتریان" },
+      { key: "customer.create", label: "تعریف مشتری جدید" },
+      { key: "customer.edit", label: "ویرایش مشتریان" },
+    ]
+  },
+  {
+    category: "💰 امور مالی و حسابداری",
+    items: [
+      { key: "accounting.view", label: "مشاهده اسناد حسابداری" },
+      { key: "accounting.create", label: "ثبت سند و کدینگ" },
+      { key: "accounting.reports", label: "دسترسی به گزارشات مالی" },
+      { key: "accounting.treasury", label: "خزانه‌داری (چک و نقد)" },
+    ]
+  },
+  {
+    category: "📝 قراردادها",
+    items: [
+      { key: "rent.list", label: "مشاهده لیست اجاره‌ها" },
+      { key: "rent.create", label: "ثبت قرارداد اجاره" },
+    ]
+  },
+  {
+    category: "⚙️ مدیریت سیستم",
+    items: [
+      { key: "member.view", label: "مشاهده لیست اعضا" },
+      { key: "member.create", label: "افزودن عضو جدید" },
+      { key: "member.manage", label: "مدیریت دسترسی‌ها (خطرناک)" },
+    ]
+  },
+];
+
+/**
+ * تبدیل تاریخ برای Input Date
  */
 const toInputDate = (value) => {
   if (!value) return "";
   try {
     const d = new Date(value);
     if (Number.isNaN(d.getTime())) return "";
-    const y = d.getFullYear();
-    const m = String(d.getMonth() + 1).padStart(2, "0");
-    const day = String(d.getDate()).padStart(2, "0");
-    return `${y}-${m}-${day}`;
+    return d.toISOString().split('T')[0];
   } catch {
     return "";
-  }
-};
-
-/**
- * نمایش تاریخ شمسی
- */
-const toPersianDate = (value) => {
-  if (!value) return "-";
-  try {
-    return new Date(value).toLocaleDateString("fa-IR");
-  } catch {
-    return "-";
   }
 };
 
@@ -56,8 +106,11 @@ const EditMember = () => {
   const [error, setError] = useState("");
   const [success, setSuccess] = useState("");
 
+  // ✅ استیت دسترسی‌ها
+  const [selectedPerms, setSelectedPerms] = useState([]);
+
   const [initialValues, setInitialValues] = useState({
-    role: "union_member",
+    role: "employee",
     member_code: "",
     full_name: "",
     father_name: "",
@@ -83,10 +136,16 @@ const EditMember = () => {
       setError("");
 
       try {
-        const res = await get(`/members/${id}`);
+        const { data: res, error: fetchError } = await supabase
+            .from("members")
+            .select("*")
+            .eq("id", id)
+            .single();
+
+        if (fetchError) throw fetchError;
 
         setInitialValues({
-          role: res.role || "union_member",
+          role: res.role || "employee",
           member_code: res.member_code || "",
           full_name: res.full_name || "",
           father_name: res.father_name || "",
@@ -104,34 +163,57 @@ const EditMember = () => {
           company_name: res.company_name || "",
           registration_number: res.registration_number || "",
         });
+
+        // لود کردن دسترسی‌ها
+        setSelectedPerms(Array.isArray(res.permissions) ? res.permissions : []);
+
       } catch (err) {
-        setError("خطا در دریافت اطلاعات عضو");
+        console.error(err);
+        setError("خطا در دریافت اطلاعات عضو: " + err.message);
+      } finally {
+        setLoadingData(false);
       }
-
-      setLoadingData(false);
     }
 
-    if (id) {
-      loadMember();
-    } else {
-      setError("شناسه عضو نامعتبر است");
-      setLoadingData(false);
-    }
+    if (id) loadMember();
   }, [id]);
 
-  // 🧾 ولیدیشن
+  // 🟧 1. اصلاح تابع تغییر وضعیت تکی (با استیت فانکشنال)
+  const togglePermission = (permKey) => {
+    setSelectedPerms((prev) => {
+      if (prev.includes(permKey)) {
+        return prev.filter(p => p !== permKey); // حذف
+      } else {
+        return [...prev, permKey]; // اضافه
+      }
+    });
+  };
+
+  // 🟧 2. تابع انتخاب همه
+  const toggleCategory = (categoryItems) => {
+    const allKeys = categoryItems.map(i => i.key);
+    const allSelected = allKeys.every(k => selectedPerms.includes(k));
+
+    if (allSelected) {
+      // حذف همه
+      setSelectedPerms(prev => prev.filter(p => !allKeys.includes(p)));
+    } else {
+      // اضافه کردن موارد نداشته
+      setSelectedPerms(prev => {
+        const newPerms = [...prev];
+        allKeys.forEach(k => {
+          if (!newPerms.includes(k)) newPerms.push(k);
+        });
+        return newPerms;
+      });
+    }
+  };
+
+  // 🧾 ولیدیشن فرم
   const validationSchema = Yup.object({
-    full_name: Yup.string()
-      .required("نام و نام خانوادگی الزامی است")
-      .min(2, "حداقل ۲ کاراکتر"),
-    member_code: Yup.string().required("کد عضویت الزامی است"),
-    mobile: Yup.string()
-      .required("موبایل الزامی است")
-      .matches(/^09\d{9}$/, "شماره موبایل نادرست است"),
-    national_id: Yup.string()
-      .nullable()
-      .matches(/^\d{10}$/, "کد ملی باید ۱۰ رقم باشد")
-      .notRequired(),
+    full_name: Yup.string().required("نام و نام خانوادگی الزامی است"),
+    mobile: Yup.string().required("موبایل الزامی است"),
+    role: Yup.string().required("نقش الزامی است"),
   });
 
   const formik = useFormik({
@@ -143,557 +225,307 @@ const EditMember = () => {
       setSuccess("");
       setSaving(true);
 
-
       try {
         const payload = {
           role: values.role,
           member_code: values.member_code,
           full_name: values.full_name,
-          father_name: values.father_name || "",
-          national_id: values.national_id || "",
+          father_name: values.father_name || null,
+          national_id: values.national_id || null,
           mobile: values.mobile,
-          phone: values.phone || "",
-          address: values.address || "",
+          phone: values.phone || null,
+          address: values.address || null,
           birth_date: values.birth_date || null,
-          business_name: values.business_name || "",
+          business_name: values.business_name || null,
           category: values.category || "warehouse",
           member_status: values.member_status || "active",
-          license_number: values.license_number || "",
+          license_number: values.license_number || null,
           license_issue_date: values.license_issue_date || null,
           license_expire_date: values.license_expire_date || null,
-          company_name: values.company_name || "",
-          registration_number: values.registration_number || "",
+          company_name: values.company_name || null,
+          registration_number: values.registration_number || null,
+          permissions: selectedPerms, // ✅ ذخیره دسترسی‌ها
+          updated_at: new Date()
         };
 
-        const res = await patch(`/members/${id}`, payload);
+        const { error: updateError } = await supabase
+            .from("members")
+            .update(payload)
+            .eq("id", id);
 
+        if (updateError) throw updateError;
 
-        setSuccess("اطلاعات عضو با موفقیت ذخیره شد");
+        setSuccess("اطلاعات عضو و دسترسی‌ها با موفقیت ذخیره شد");
+        window.scrollTo(0, 0);
+        setTimeout(() => navigate("/members/list"), 1500);
 
-        setTimeout(() => {
-          setSuccess("");
-          // برگشت به لیست
-          navigate("/members/list");
-        }, 1500);
       } catch (err) {
-        const msg =
-          err?.response?.data?.error ||
-          err?.response?.data?.message ||
-          "خطا در ذخیره اطلاعات عضو";
-        setError(msg);
+        console.error(err);
+        setError(err.message || "خطا در ذخیره اطلاعات");
+        window.scrollTo(0, 0);
+      } finally {
+        setSaving(false);
       }
-
-      setSaving(false);
     },
   });
 
   if (loadingData) {
     return (
-      <div className="page-content">
-        <Container fluid>
-          <Row>
-            <Col lg={10} className="mx-auto">
-              <Card>
-                <CardBody className="text-center py-5">
-                  <Spinner color="primary" />
-                  <div className="mt-3">
-                    <h5 className="text-muted">در حال بارگذاری اطلاعات عضو...</h5>
-                  </div>
-                </CardBody>
-              </Card>
-            </Col>
-          </Row>
-        </Container>
-      </div>
+        <div className="page-content">
+          <Container fluid>
+            <Card>
+              <CardBody className="text-center py-5">
+                <Spinner color="primary" />
+                <h5 className="mt-3 text-muted">در حال بارگذاری اطلاعات...</h5>
+              </CardBody>
+            </Card>
+          </Container>
+        </div>
     );
   }
 
   return (
-    <React.Fragment>
-      <div className="page-content">
-        <Container fluid>
-          {/* Breadcrumb */}
-          <div className="page-title-box d-sm-flex align-items-center justify-content-between">
-            <h4 className="mb-sm-0 font-size-18">ویرایش عضو</h4>
-
-            <div className="page-title-right">
-              <ol className="breadcrumb m-0">
-                <li className="breadcrumb-item">
-                  <Link to="/dashboard">داشبورد</Link>
-                </li>
-                <li className="breadcrumb-item">
-                  <Link to="/members">اعضا</Link>
-                </li>
-                <li className="breadcrumb-item active">ویرایش عضو</li>
-              </ol>
+      <React.Fragment>
+        <div className="page-content">
+          <Container fluid>
+            {/* Header */}
+            <div className="page-title-box d-flex align-items-center justify-content-between">
+              <h4 className="mb-0 font-size-18">ویرایش عضو</h4>
+              <div className="page-title-right">
+                <ol className="breadcrumb m-0">
+                  <li className="breadcrumb-item"><Link to="/dashboard">داشبورد</Link></li>
+                  <li className="breadcrumb-item"><Link to="/members/list">اعضا</Link></li>
+                  <li className="breadcrumb-item active">ویرایش</li>
+                </ol>
+              </div>
             </div>
-          </div>
 
-          <Row>
-            <Col lg={10} className="mx-auto">
-              <Card>
-                <CardBody>
-                  <div className="mb-4">
-                    <h4 className="card-title">اطلاعات عضو</h4>
-                    <p className="card-title-desc">
-                      لطفاً اطلاعات عضو را بررسی و در صورت نیاز اصلاح کنید.
-                    </p>
-                  </div>
+            <Form onSubmit={(e) => { e.preventDefault(); formik.handleSubmit(); }}>
 
-                  {/* Alerts */}
-                  {error && (
-                    <Alert color="danger" className="alert-dismissible fade show">
-                      <i className="mdi mdi-block-helper me-2" />
-                      {error}
-                      <button
-                        type="button"
-                        className="btn-close"
-                        onClick={() => setError("")}
-                      ></button>
-                    </Alert>
-                  )}
+              {/* Alerts */}
+              {error && <Alert color="danger">{error}</Alert>}
+              {success && <Alert color="success">{success}</Alert>}
 
-                  {success && (
-                    <Alert color="success" className="alert-dismissible fade show">
-                      <i className="mdi mdi-check-all me-2" />
-                      {success}
-                      <button
-                        type="button"
-                        className="btn-close"
-                        onClick={() => setSuccess("")}
-                      ></button>
-                    </Alert>
-                  )}
-
-                  <Form
-                    onSubmit={(e) => {
-                      e.preventDefault();
-                      formik.handleSubmit();
-                    }}
-                  >
-                    {/* نقش و وضعیت */}
-                    <div className="mb-4">
-                      <h5 className="font-size-14 mb-3">
-                        <i className="bx bx-user-circle me-1" />
-                        نقش و وضعیت
-                      </h5>
+              {/* بخش ۱: اطلاعات پایه */}
+              <Row>
+                <Col lg={12}>
+                  <Card>
+                    <CardBody>
+                      <h4 className="card-title mb-4">اطلاعات هویتی و سازمانی</h4>
 
                       <Row>
                         <Col md={4}>
                           <div className="mb-3">
-                            <Label htmlFor="role" className="form-label">
-                              نقش
-                            </Label>
+                            <Label>نقش در سیستم <span className="text-danger">*</span></Label>
                             <Input
-                              id="role"
-                              name="role"
-                              type="select"
-                              value={formik.values.role}
-                              onChange={formik.handleChange}
-                              disabled={saving}
+                                type="select"
+                                name="role"
+                                value={formik.values.role}
+                                onChange={formik.handleChange}
+                                className="form-select"
                             >
-                              <option value="admin">👑 ادمین</option>
-                              <option value="union_member">🏛️ عضو اتحادیه</option>
-                              <option value="union_user">👤 کاربر اتحادیه</option>
+                              <option value="admin">مدیر کل (Admin)</option>
+                              <option value="employee">کارمند (Employee)</option>
+                              <option value="union_member">عضو اتحادیه</option>
+                              <option value="union_user">کاربر عادی</option>
+                              <option value="customer">مشتری (Customer)</option>
                             </Input>
                           </div>
                         </Col>
-
                         <Col md={4}>
                           <div className="mb-3">
-                            <Label htmlFor="member_status" className="form-label">
-                              وضعیت
-                            </Label>
+                            <Label>وضعیت</Label>
                             <Input
-                              id="member_status"
-                              name="member_status"
-                              type="select"
-                              value={formik.values.member_status}
-                              onChange={formik.handleChange}
-                              disabled={saving}
+                                type="select"
+                                name="member_status"
+                                value={formik.values.member_status}
+                                onChange={formik.handleChange}
                             >
                               <option value="active">فعال</option>
                               <option value="inactive">غیرفعال</option>
-                              <option value="pending">در حال بررسی</option>
-                              <option value="suspended">تعلیق شده</option>
+                              <option value="suspended">معلق</option>
                             </Input>
                           </div>
                         </Col>
-
                         <Col md={4}>
                           <div className="mb-3">
-                            <Label htmlFor="category" className="form-label">
-                              دسته‌بندی
-                            </Label>
+                            <Label>نام و نام خانوادگی <span className="text-danger">*</span></Label>
                             <Input
-                              id="category"
-                              name="category"
-                              type="select"
-                              value={formik.values.category}
-                              onChange={formik.handleChange}
-                              disabled={saving}
-                            >
-                              <option value="warehouse">انبار</option>
-                              <option value="transport">باربری</option>
-                              <option value="other">سایر</option>
-                            </Input>
-                          </div>
-                        </Col>
-                      </Row>
-                    </div>
-
-                    {/* اطلاعات هویتی */}
-                    <div className="mb-4">
-                      <h5 className="font-size-14 mb-3">
-                        <i className="bx bx-id-card me-1" />
-                        اطلاعات هویتی
-                      </h5>
-
-                      <Row>
-                        <Col md={6}>
-                          <div className="mb-3">
-                            <Label htmlFor="full_name" className="form-label">
-                              نام و نام خانوادگی <span className="text-danger">*</span>
-                            </Label>
-                            <Input
-                              id="full_name"
-                              name="full_name"
-                              type="text"
-                              value={formik.values.full_name}
-                              onChange={formik.handleChange}
-                              onBlur={formik.handleBlur}
-                              invalid={
-                                formik.touched.full_name &&
-                                !!formik.errors.full_name
-                              }
-                              disabled={saving}
+                                name="full_name"
+                                value={formik.values.full_name}
+                                onChange={formik.handleChange}
+                                invalid={formik.touched.full_name && !!formik.errors.full_name}
                             />
                             <FormFeedback>{formik.errors.full_name}</FormFeedback>
                           </div>
                         </Col>
-
-                        <Col md={3}>
-                          <div className="mb-3">
-                            <Label htmlFor="father_name" className="form-label">
-                              نام پدر
-                            </Label>
-                            <Input
-                              id="father_name"
-                              name="father_name"
-                              type="text"
-                              value={formik.values.father_name}
-                              onChange={formik.handleChange}
-                              disabled={saving}
-                            />
-                          </div>
-                        </Col>
-
-                        <Col md={3}>
-                          <div className="mb-3">
-                            <Label htmlFor="national_id" className="form-label">
-                              کد ملی
-                            </Label>
-                            <Input
-                              id="national_id"
-                              name="national_id"
-                              type="text"
-                              value={formik.values.national_id}
-                              onChange={formik.handleChange}
-                              onBlur={formik.handleBlur}
-                              invalid={
-                                formik.touched.national_id &&
-                                !!formik.errors.national_id
-                              }
-                              disabled={saving}
-                            />
-                            <FormFeedback>{formik.errors.national_id}</FormFeedback>
-                          </div>
-                        </Col>
                       </Row>
 
                       <Row>
                         <Col md={4}>
                           <div className="mb-3">
-                            <Label htmlFor="member_code" className="form-label">
-                              کد عضویت <span className="text-danger">*</span>
-                            </Label>
+                            <Label>شماره موبایل <span className="text-danger">*</span></Label>
                             <Input
-                              id="member_code"
-                              name="member_code"
-                              type="text"
-                              value={formik.values.member_code}
-                              onChange={formik.handleChange}
-                              onBlur={formik.handleBlur}
-                              invalid={
-                                formik.touched.member_code &&
-                                !!formik.errors.member_code
-                              }
-                              disabled={saving}
-                            />
-                            <FormFeedback>{formik.errors.member_code}</FormFeedback>
-                          </div>
-                        </Col>
-
-                        <Col md={4}>
-                          <div className="mb-3">
-                            <Label htmlFor="mobile" className="form-label">
-                              موبایل <span className="text-danger">*</span>
-                            </Label>
-                            <Input
-                              id="mobile"
-                              name="mobile"
-                              type="text"
-                              value={formik.values.mobile}
-                              onChange={formik.handleChange}
-                              onBlur={formik.handleBlur}
-                              invalid={
-                                formik.touched.mobile && !!formik.errors.mobile
-                              }
-                              disabled={saving}
+                                name="mobile"
+                                value={formik.values.mobile}
+                                onChange={formik.handleChange}
+                                invalid={formik.touched.mobile && !!formik.errors.mobile}
                             />
                             <FormFeedback>{formik.errors.mobile}</FormFeedback>
                           </div>
                         </Col>
-
                         <Col md={4}>
                           <div className="mb-3">
-                            <Label htmlFor="phone" className="form-label">
-                              تلفن ثابت
-                            </Label>
+                            <Label>کد ملی</Label>
                             <Input
-                              id="phone"
-                              name="phone"
-                              type="text"
-                              value={formik.values.phone}
-                              onChange={formik.handleChange}
-                              disabled={saving}
+                                name="national_id"
+                                value={formik.values.national_id}
+                                onChange={formik.handleChange}
+                            />
+                          </div>
+                        </Col>
+                        <Col md={4}>
+                          <div className="mb-3">
+                            <Label>کد عضویت</Label>
+                            <Input
+                                name="member_code"
+                                value={formik.values.member_code}
+                                onChange={formik.handleChange}
                             />
                           </div>
                         </Col>
                       </Row>
 
-                      <Row>
-                        <Col md={8}>
-                          <div className="mb-3">
-                            <Label htmlFor="address" className="form-label">
-                              آدرس
-                            </Label>
-                            <Input
-                              id="address"
-                              name="address"
-                              type="textarea"
-                              rows="3"
-                              value={formik.values.address}
-                              onChange={formik.handleChange}
-                              disabled={saving}
-                            />
-                          </div>
-                        </Col>
+                      <div className="mb-3">
+                        <Label>آدرس</Label>
+                        <Input
+                            type="textarea"
+                            name="address"
+                            value={formik.values.address}
+                            onChange={formik.handleChange}
+                        />
+                      </div>
 
-                        <Col md={4}>
-                          <div className="mb-3">
-                            <Label htmlFor="birth_date" className="form-label">
-                              تاریخ تولد
-                            </Label>
-                            <Input
-                              id="birth_date"
-                              name="birth_date"
-                              type="date"
-                              value={formik.values.birth_date}
-                              onChange={formik.handleChange}
-                              disabled={saving}
-                            />
-                            {formik.values.birth_date && (
-                              <small className="text-muted d-block mt-1">
-                                شمسی:{" "}
-                                {toPersianDate(formik.values.birth_date)}
-                              </small>
-                            )}
-                          </div>
-                        </Col>
-                      </Row>
+                      {/* اطلاعات تکمیلی (کسب و کار) */}
+                      <div className="mt-4">
+                        <h5 className="font-size-14 text-muted mb-3">اطلاعات تکمیلی</h5>
+                        <Row>
+                          <Col md={6}>
+                            <div className="mb-3">
+                              <Label>نام کسب و کار / شرکت</Label>
+                              <Input
+                                  name="company_name"
+                                  value={formik.values.company_name}
+                                  onChange={formik.handleChange}
+                              />
+                            </div>
+                          </Col>
+                          <Col md={6}>
+                            <div className="mb-3">
+                              <Label>شماره ثبت / پروانه</Label>
+                              <Input
+                                  name="license_number"
+                                  value={formik.values.license_number}
+                                  onChange={formik.handleChange}
+                              />
+                            </div>
+                          </Col>
+                        </Row>
+                      </div>
+
+                    </CardBody>
+                  </Card>
+                </Col>
+              </Row>
+
+              {/* بخش ۲: مدیریت دسترسی‌ها (نسخه اصلاح شده با قابلیت کلیک روی کل ردیف) */}
+              {formik.values.role === 'admin' ? (
+                  <Alert color="info" className="d-flex align-items-center mt-3">
+                    <i className="bx bx-shield-quarter font-size-24 me-3"></i>
+                    <div>
+                      <strong>مدیر کل (Admin)</strong>
+                      <br/>
+                      این کاربر دارای دسترسی کامل سیستمی است و نیازی به تنظیم دسترسی‌های ریز ندارد.
                     </div>
+                  </Alert>
+              ) : (
+                  <div className="mt-4">
+                    <h4 className="font-size-16 mb-3">تنظیمات دسترسی (Permissions)</h4>
+                    <Row>
+                      {ALL_PERMISSIONS.map((section, index) => (
+                          <Col md={6} xl={4} key={index} className="mb-4">
+                            <Card className="h-100 border shadow-none">
+                              <CardBody className="p-0"> {/* پدینگ صفر برای استایل ردیفی */}
 
-                    {/* اطلاعات کسب و کار */}
-                    <div className="mb-4">
-                      <h5 className="font-size-14 mb-3">
-                        <i className="bx bx-briefcase-alt-2 me-1" />
-                        اطلاعات کسب و کار
-                      </h5>
+                                {/* هدر کارت */}
+                                <div className="d-flex justify-content-between align-items-center p-3 border-bottom bg-light">
+                                  <CardTitle className="h6 mb-0 text-primary">{section.category}</CardTitle>
+                                  <Button
+                                      size="sm"
+                                      color="primary"
+                                      outline
+                                      className="font-size-12 py-0"
+                                      onClick={(e) => {
+                                        e.stopPropagation();
+                                        toggleCategory(section.items);
+                                      }}
+                                  >
+                                    انتخاب همه
+                                  </Button>
+                                </div>
 
-                      <Row>
-                        <Col md={6}>
-                          <div className="mb-3">
-                            <Label htmlFor="business_name" className="form-label">
-                              نام کسب و کار
-                            </Label>
-                            <Input
-                              id="business_name"
-                              name="business_name"
-                              type="text"
-                              value={formik.values.business_name}
-                              onChange={formik.handleChange}
-                              disabled={saving}
-                            />
-                          </div>
-                        </Col>
+                                {/* لیست آیتم‌ها */}
+                                <div className="d-flex flex-column">
+                                  {section.items.map((perm) => {
+                                    const isChecked = selectedPerms.includes(perm.key);
+                                    return (
+                                        <div
+                                            key={perm.key}
+                                            // ✅ کل ردیف قابل کلیک است
+                                            className={`d-flex justify-content-between align-items-center p-3 border-bottom ${isChecked ? 'bg-soft-success' : ''}`}
+                                            style={{ cursor: 'pointer', transition: '0.2s' }}
+                                            onClick={() => togglePermission(perm.key)}
+                                        >
+                                            <span className={`font-size-13 ${isChecked ? 'text-success fw-bold' : 'text-secondary'}`}>
+                                                {perm.label}
+                                            </span>
 
-                        <Col md={6}>
-                          <div className="mb-3">
-                            <Label htmlFor="company_name" className="form-label">
-                              نام شرکت
-                            </Label>
-                            <Input
-                              id="company_name"
-                              name="company_name"
-                              type="text"
-                              value={formik.values.company_name}
-                              onChange={formik.handleChange}
-                              disabled={saving}
-                            />
-                          </div>
-                        </Col>
-                      </Row>
+                                          {/* سوییچ */}
+                                          <div className="form-check form-switch m-0" style={{ pointerEvents: 'none' }}>
+                                            <Input
+                                                type="checkbox"
+                                                className="form-check-input"
+                                                checked={isChecked}
+                                                readOnly // فقط نمایشی
+                                                style={{ transform: 'scale(1.2)' }}
+                                            />
+                                          </div>
+                                        </div>
+                                    );
+                                  })}
+                                </div>
+                              </CardBody>
+                            </Card>
+                          </Col>
+                      ))}
+                    </Row>
+                  </div>
+              )}
 
-                      <Row>
-                        <Col md={6}>
-                          <div className="mb-3">
-                            <Label
-                              htmlFor="registration_number"
-                              className="form-label"
-                            >
-                              شماره ثبت
-                            </Label>
-                            <Input
-                              id="registration_number"
-                              name="registration_number"
-                              type="text"
-                              value={formik.values.registration_number}
-                              onChange={formik.handleChange}
-                              disabled={saving}
-                            />
-                          </div>
-                        </Col>
-                      </Row>
-                    </div>
+              {/* دکمه‌ها */}
+              <div className="d-flex gap-2 mb-5 justify-content-end">
+                <Button type="button" color="secondary" size="lg" onClick={() => navigate("/members/list")} disabled={saving}>
+                  بازگشت
+                </Button>
+                <Button type="submit" color="primary" size="lg" disabled={saving}>
+                  {saving ? <Spinner size="sm" /> : <><i className="bx bx-save me-1"></i> ذخیره تغییرات</>}
+                </Button>
+              </div>
 
-                    {/* اطلاعات پروانه */}
-                    <div className="mb-4">
-                      <h5 className="font-size-14 mb-3">
-                        <i className="bx bx-file me-1" />
-                        اطلاعات پروانه
-                      </h5>
-
-                      <Row>
-                        <Col md={4}>
-                          <div className="mb-3">
-                            <Label
-                              htmlFor="license_number"
-                              className="form-label"
-                            >
-                              شماره پروانه
-                            </Label>
-                            <Input
-                              id="license_number"
-                              name="license_number"
-                              type="text"
-                              value={formik.values.license_number}
-                              onChange={formik.handleChange}
-                              disabled={saving}
-                            />
-                          </div>
-                        </Col>
-
-                        <Col md={4}>
-                          <div className="mb-3">
-                            <Label
-                              htmlFor="license_issue_date"
-                              className="form-label"
-                            >
-                              تاریخ صدور پروانه
-                            </Label>
-                            <Input
-                              id="license_issue_date"
-                              name="license_issue_date"
-                              type="date"
-                              value={formik.values.license_issue_date}
-                              onChange={formik.handleChange}
-                              disabled={saving}
-                            />
-                            {formik.values.license_issue_date && (
-                              <small className="text-muted d-block mt-1">
-                                شمسی:{" "}
-                                {toPersianDate(
-                                  formik.values.license_issue_date
-                                )}
-                              </small>
-                            )}
-                          </div>
-                        </Col>
-
-                        <Col md={4}>
-                          <div className="mb-3">
-                            <Label
-                              htmlFor="license_expire_date"
-                              className="form-label"
-                            >
-                              تاریخ انقضای پروانه
-                            </Label>
-                            <Input
-                              id="license_expire_date"
-                              name="license_expire_date"
-                              type="date"
-                              value={formik.values.license_expire_date}
-                              onChange={formik.handleChange}
-                              disabled={saving}
-                            />
-                            {formik.values.license_expire_date && (
-                              <small className="text-muted d-block mt-1">
-                                شمسی:{" "}
-                                {toPersianDate(
-                                  formik.values.license_expire_date
-                                )}
-                              </small>
-                            )}
-                          </div>
-                        </Col>
-                      </Row>
-                    </div>
-
-                    {/* دکمه‌ها */}
-                    <div className="d-flex flex-wrap gap-2">
-                      <Button type="submit" color="primary" disabled={saving}>
-                        {saving ? (
-                          <>
-                            <Spinner size="sm" className="me-2" />
-                            در حال ذخیره...
-                          </>
-                        ) : (
-                          <>
-                            <i className="bx bx-check-double me-1" />
-                            ذخیره تغییرات
-                          </>
-                        )}
-                      </Button>
-
-                      <Button
-                        type="button"
-                        color="light"
-                        disabled={saving}
-                        onClick={() => navigate("/members")}
-                      >
-                        <i className="bx bx-arrow-back me-1" />
-                        بازگشت به لیست
-                      </Button>
-                    </div>
-                  </Form>
-                </CardBody>
-              </Card>
-            </Col>
-          </Row>
-        </Container>
-      </div>
-    </React.Fragment>
+            </Form>
+          </Container>
+        </div>
+      </React.Fragment>
   );
 };
 

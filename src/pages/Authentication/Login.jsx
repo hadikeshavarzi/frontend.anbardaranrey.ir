@@ -1,287 +1,328 @@
-import React, { useState } from "react";
-import * as Yup from "yup";
-import { useFormik } from "formik";
-
+import React, { useState, useEffect } from "react";
+import { Link } from "react-router-dom";
 import {
-  Row,
-  Col,
-  CardBody,
-  Card,
-  Alert,
-  Container,
-  Form,
-  Input,
-  FormFeedback,
-  Label,
-  Button,
+  Container, Row, Col, Card, CardBody, Form, Input, Label, FormFeedback, Button, Spinner, Alert
 } from "reactstrap";
+import { useFormik } from "formik";
+import * as Yup from "yup";
+import { supabase } from "../../helpers/supabase"; // مسیر ایمپورت را طبق پروژه خودتان چک کنید
 
-import profile from "../../assets/images/profile-img.png";
-import lightlogo from "../../assets/images/logo-light.svg";
-
+// اگر ریداکس دارید این‌ها بماند
 import { useDispatch } from "react-redux";
 import { loginSuccess } from "../../store/actions";
 
-import { requestOtp, verifyOtp } from "../../services/auth";
+import profile from "../../assets/images/profile-img.png";
+import logo from "../../assets/images/logo.svg";
+
+// ==========================================
+// 🛠️ فرمت شماره برای ارسال به پنل پیامک (+98)
+// ==========================================
+const formatForAuth = (phone) => {
+  if (!phone) return "";
+  let p = phone.toString().trim();
+  if (p.startsWith("09")) return "+98" + p.substring(1);
+  if (p.startsWith("00")) return "+" + p.substring(2);
+  if (!p.startsWith("+")) return "+98" + p;
+  return p;
+};
+
+// ==========================================
+// 🛠️ فرمت شماره برای جستجو در دیتابیس (09...)
+// ==========================================
+const formatForDb = (phone) => {
+  if (!phone) return "";
+  let p = phone.toString().trim();
+  if (p.startsWith("+98")) return "0" + p.substring(3);
+  return p;
+};
 
 const Login = () => {
-  document.title = "ورود به سامانه | اتحادیه";
+  document.title = "ورود امن | مدیریت انبار";
 
   const dispatch = useDispatch();
 
   const [step, setStep] = useState(1);
-  const [mobile, setMobile] = useState("");
-  const [errorMessage, setErrorMessage] = useState("");
   const [loading, setLoading] = useState(false);
+  const [errorMsg, setErrorMsg] = useState("");
+  const [successMsg, setSuccessMsg] = useState("");
 
-  /* --------------------------------------------------
-      مرحله ۱ — دریافت OTP
-  -------------------------------------------------- */
+  const [rawMobile, setRawMobile] = useState(""); // شماره‌ای که کاربر تایپ کرد
+  const [authMobile, setAuthMobile] = useState(""); // شماره فرمت شده (+98...)
+
+  const [timer, setTimer] = useState(0);
+
+  useEffect(() => {
+    let interval = null;
+    if (timer > 0) interval = setInterval(() => setTimer((p) => p - 1), 1000);
+    return () => clearInterval(interval);
+  }, [timer]);
+
+  // ==================================================
+  // 🟢 مرحله ۱: ارسال پیامک
+  // ==================================================
   const formMobile = useFormik({
     initialValues: { mobile: "" },
     validationSchema: Yup.object({
-      mobile: Yup.string()
-          .required("شماره موبایل را وارد کنید")
-          .matches(/^09[0-9]{9}$/, "شماره موبایل معتبر نیست"),
+      mobile: Yup.string().required("شماره موبایل الزامی است"),
     }),
     onSubmit: async (values) => {
-      setErrorMessage("");
       setLoading(true);
+      setErrorMsg("");
+
+      const input = values.mobile.trim();
+      const formatted = formatForAuth(input);
 
       try {
-        const res = await requestOtp(values.mobile);
+        console.log(`📤 Sending OTP to: ${formatted}`);
 
-        if (res.success) {
-          setMobile(values.mobile);
-          setStep(2);
-        } else {
-          setErrorMessage(res.error || res.message || "خطا در ارسال کد");
+        const { error } = await supabase.auth.signInWithOtp({ phone: formatted });
+
+        if (error) {
+          if (error.message.includes("Signups not allowed")) throw new Error("ثبت‌نام بسته است.");
+          throw error;
         }
-      } catch (e) {
-        setErrorMessage("ارتباط با سرور برقرار نشد");
-      }
 
-      setLoading(false);
+        setRawMobile(input);
+        setAuthMobile(formatted);
+        setStep(2);
+        setTimer(120);
+        setSuccessMsg("کد تایید ارسال شد.");
+
+      } catch (err) {
+        console.error("OTP Error:", err);
+        setErrorMsg(err.message || "خطا در ارسال پیامک.");
+      } finally {
+        setLoading(false);
+      }
     },
   });
 
-  /* --------------------------------------------------
-      مرحله ۲ — تأیید OTP
-  -------------------------------------------------- */
+  // ==================================================
+  // 🟢 مرحله ۲: تایید کد و ورود (اصلاح شده)
+  // ==================================================
   const formOtp = useFormik({
     initialValues: { otp: "" },
     validationSchema: Yup.object({
-      otp: Yup.string()
-          .required("کد را وارد کنید")
-          .matches(/^[0-9]{6}$/, "کد باید ۶ رقم باشد"),
+      otp: Yup.string().required("کد تایید را وارد کنید").min(6, "کد ۶ رقمی است"),
     }),
     onSubmit: async (values) => {
-      setErrorMessage("");
       setLoading(true);
+      setErrorMsg("");
+      setSuccessMsg("");
 
       try {
-        const res = await verifyOtp(mobile, values.otp);
+        console.log("🔄 Verifying OTP...");
 
-        if (!res.success || !res.token) {
-          setErrorMessage(res.error || "کد صحیح نیست");
-          setLoading(false);
-          return;
+        // 1. تایید کد در Auth Supabase
+        const { data, error } = await supabase.auth.verifyOtp({
+          phone: authMobile,
+          token: values.otp,
+          type: 'sms',
+        });
+
+        if (error) throw error;
+        if (!data.session) throw new Error("نشست کاربری ایجاد نشد.");
+
+        console.log("✅ Auth Verified. Searching in DB...");
+
+        // 2. جستجوی کاربر در جدول members
+        let member = null;
+
+        // تلاش اول: با شماره خام (0912...)
+        let { data: m1 } = await supabase.from('members').select('*').eq('mobile', rawMobile).maybeSingle();
+        if (m1) member = m1;
+
+        // تلاش دوم: اگر پیدا نشد، با فرمت دیتابیس
+        if (!member) {
+          const dbFormat = formatForDb(authMobile);
+          let { data: m2 } = await supabase.from('members').select('*').eq('mobile', dbFormat).maybeSingle();
+          if (m2) member = m2;
         }
 
-        const user = res.user;
+        if (!member) {
+          throw new Error("اطلاعات شما در سیستم ثبت نشده است.");
+        }
 
-        // ذخیره در localStorage
-        localStorage.setItem("authToken", res.token);
-        localStorage.setItem("user", JSON.stringify(user));
+        if (member.member_status !== 'active') {
+          throw new Error("حساب کاربری شما فعال نیست.");
+        }
 
-        // ذخیره در Redux
-        dispatch(
-            loginSuccess({
-              token: res.token,
-              user,
-            })
-        );
+        console.log("✅ Member Found:", member);
 
-        // انتقال به داشبورد
+        // 3. آماده‌سازی آبجکت کاربر
+        const userObj = {
+          id: member.id,
+          email: member.email || "user@local.com",
+          phone: member.mobile,
+          role: member.role,
+          member_details: member,
+          permissions: member.permissions || []
+        };
+
+        // 4. ذخیره در LocalStorage
+        localStorage.setItem("user", JSON.stringify(userObj));
+        localStorage.setItem("authUser", JSON.stringify(userObj));
+
+        // ⭐⭐⭐ بخش مهم: ذخیره توکن واقعی ⭐⭐⭐
+        const accessToken = data.session?.access_token;
+
+        if (accessToken) {
+          localStorage.setItem("token", accessToken); // ✅ توکن واقعی ذخیره شد
+          console.log("🔐 Real Token Saved Successfully");
+        } else {
+          // حالت اضطراری (اگر به هر دلیلی سشن نبود)
+          console.warn("⚠️ No access token found inside session object!");
+          throw new Error("خطا در دریافت توکن امنیتی");
+        }
+        // ⭐⭐⭐ پایان بخش مهم ⭐⭐⭐
+
+        // 5. آپدیت ریداکس (اختیاری)
+        try {
+          if (dispatch) dispatch(loginSuccess(userObj));
+        } catch (reduxErr) {
+          console.warn("Redux Dispatch Skipped");
+        }
+
+        // 6. انتقال به داشبورد
+        setSuccessMsg("ورود موفق! انتقال به داشبورد...");
         setTimeout(() => {
           window.location.assign("/dashboard");
-        }, 80);
+        }, 500);
 
-      } catch (e) {
-        setErrorMessage("ارتباط با سرور برقرار نشد");
+      } catch (err) {
+        console.error("Login Error:", err);
+        setErrorMsg(err.message || "کد اشتباه است یا خطایی رخ داده.");
+      } finally {
+        setLoading(false);
       }
-
-      setLoading(false);
     },
   });
 
-  /* --------------------------------------------------
-      ارسال مجدد OTP
-  -------------------------------------------------- */
-  const handleResendOtp = async () => {
-    setErrorMessage("");
-    setLoading(true);
-
-    try {
-      const res = await requestOtp(mobile);
-      if (res.success) {
-        alert("کد جدید ارسال شد");
-      } else {
-        setErrorMessage(res.message || "خطا در ارسال مجدد");
-      }
-    } catch {
-      setErrorMessage("خطا در اتصال");
-    }
-
-    setLoading(false);
+  const handleBack = () => {
+    setStep(1);
+    setErrorMsg("");
+    setSuccessMsg("");
+    formOtp.resetForm();
   };
 
-  /* --------------------------------------------------
-      UI
-  -------------------------------------------------- */
+  const handleResend = () => {
+    formMobile.handleSubmit();
+  };
+
   return (
-      <div className="account-pages my-5 pt-sm-5">
-        <Container>
-          <Row className="justify-content-center">
-            <Col md={8} lg={6} xl={5}>
-              <Card className="overflow-hidden">
-                <div className="bg-primary-subtle">
-                  <Row>
-                    <Col xs={7}>
-                      <div className="text-primary p-4">
-                        <h5 className="text-primary">خوش آمدید!</h5>
-                        <p>برای ورود شماره موبایل را وارد کنید</p>
-                      </div>
-                    </Col>
-                    <Col className="col-5 align-self-end">
-                      <img src={profile} alt="" className="img-fluid" />
-                    </Col>
-                  </Row>
-                </div>
-
-                <CardBody className="pt-0">
-                  <div className="auth-logo text-center mt-4">
-                    <div className="avatar-md profile-user-wid mx-auto">
-                    <span className="avatar-title rounded-circle bg-light">
-                      <img src={lightlogo} alt="" height="34" />
-                    </span>
+      <React.Fragment>
+        <div className="account-pages my-5 pt-sm-5">
+          <Container>
+            <Row className="justify-content-center">
+              <Col md={8} lg={6} xl={5}>
+                <Card className="overflow-hidden">
+                  <div className="bg-primary-subtle">
+                    <Row>
+                      <Col xs={7}>
+                        <div className="text-primary p-4">
+                          <h5 className="text-primary">خوش آمدید!</h5>
+                          <p>ورود با رمز یکبار مصرف (SMS)</p>
+                        </div>
+                      </Col>
+                      <Col xs={5} className="align-self-end">
+                        <img src={profile} alt="" className="img-fluid" />
+                      </Col>
+                    </Row>
+                  </div>
+                  <CardBody className="pt-0">
+                    <div className="auth-logo">
+                      <Link to="/" className="auth-logo-light">
+                        <div className="avatar-md profile-user-wid mb-4">
+                        <span className="avatar-title rounded-circle bg-light">
+                          <img src={logo} alt="" className="rounded-circle" height="34" />
+                        </span>
+                        </div>
+                      </Link>
                     </div>
-                  </div>
 
-                  <div className="p-3">
-                    {errorMessage && <Alert color="danger">{errorMessage}</Alert>}
+                    <div className="p-2">
+                      {errorMsg && <Alert color="danger">{errorMsg}</Alert>}
+                      {successMsg && <Alert color="success">{successMsg}</Alert>}
 
-                    {/* مرحله ۱ */}
-                    {step === 1 && (
-                        <Form
-                            onSubmit={(e) => {
-                              e.preventDefault();
-                              formMobile.handleSubmit();
-                            }}
-                        >
-                          <div className="mb-3">
-                            <Label>شماره موبایل</Label>
-                            <Input
-                                name="mobile"
-                                type="text"
-                                placeholder="09121234567"
-                                value={formMobile.values.mobile}
-                                onChange={formMobile.handleChange}
-                                onBlur={formMobile.handleBlur}
-                                invalid={
-                                    formMobile.touched.mobile &&
-                                    !!formMobile.errors.mobile
-                                }
-                                disabled={loading}
-                            />
-                            <FormFeedback>
-                              {formMobile.errors.mobile}
-                            </FormFeedback>
-                          </div>
+                      {/* === STEP 1: MOBILE === */}
+                      {step === 1 && (
+                          <Form className="form-horizontal" onSubmit={(e) => { e.preventDefault(); formMobile.handleSubmit(); }}>
+                            <div className="mb-3">
+                              <Label className="form-label">شماره موبایل</Label>
+                              <Input
+                                  name="mobile"
+                                  className="form-control"
+                                  placeholder="مثال: 0912..."
+                                  dir="ltr"
+                                  onChange={formMobile.handleChange}
+                                  onBlur={formMobile.handleBlur}
+                                  value={formMobile.values.mobile}
+                                  invalid={!!(formMobile.touched.mobile && formMobile.errors.mobile)}
+                                  disabled={loading}
+                              />
+                              {formMobile.touched.mobile && formMobile.errors.mobile && (
+                                  <FormFeedback>{formMobile.errors.mobile}</FormFeedback>
+                              )}
+                            </div>
+                            <div className="mt-3 d-grid">
+                              <Button color="primary" type="submit" disabled={loading}>
+                                {loading ? <Spinner size="sm" /> : "ارسال کد تایید"}
+                              </Button>
+                            </div>
+                          </Form>
+                      )}
 
-                          <Button
-                              color="primary"
-                              className="w-100"
-                              type="submit"
-                              disabled={loading}
-                          >
-                            {loading ? "در حال ارسال..." : "ارسال کد"}
-                          </Button>
-                        </Form>
-                    )}
+                      {/* === STEP 2: OTP === */}
+                      {step === 2 && (
+                          <Form className="form-horizontal" onSubmit={(e) => { e.preventDefault(); formOtp.handleSubmit(); }}>
+                            <div className="text-center mb-4">
+                              <p className="text-muted">کد ارسال شده به <b>{rawMobile}</b></p>
+                              <Button color="link" size="sm" onClick={handleBack} className="p-0">(ویرایش شماره)</Button>
+                            </div>
 
-                    {/* مرحله ۲ */}
-                    {step === 2 && (
-                        <Form
-                            onSubmit={(e) => {
-                              e.preventDefault();
-                              formOtp.handleSubmit();
-                            }}
-                        >
-                          <p className="text-muted mb-2">
-                            کد تایید به <strong>{mobile}</strong> ارسال شد
-                          </p>
+                            <div className="mb-3">
+                              <Label className="form-label">کد تایید (OTP)</Label>
+                              <Input
+                                  name="otp"
+                                  className="form-control text-center font-size-18 tracking-widest"
+                                  placeholder="- - - - - -"
+                                  maxLength={6}
+                                  dir="ltr"
+                                  autoComplete="one-time-code"
+                                  onChange={formOtp.handleChange}
+                                  onBlur={formOtp.handleBlur}
+                                  value={formOtp.values.otp}
+                                  invalid={!!(formOtp.touched.otp && formOtp.errors.otp)}
+                                  disabled={loading}
+                              />
+                              {formOtp.touched.otp && formOtp.errors.otp && (
+                                  <FormFeedback>{formOtp.errors.otp}</FormFeedback>
+                              )}
+                            </div>
 
-                          <div className="mb-3">
-                            <Label>کد تایید</Label>
-                            <Input
-                                name="otp"
-                                type="text"
-                                placeholder="123456"
-                                value={formOtp.values.otp}
-                                onChange={formOtp.handleChange}
-                                onBlur={formOtp.handleBlur}
-                                invalid={
-                                    formOtp.touched.otp && !!formOtp.errors.otp
-                                }
-                                maxLength={6}
-                                disabled={loading}
-                            />
-                            <FormFeedback>{formOtp.errors.otp}</FormFeedback>
-                          </div>
+                            <div className="mt-3 d-grid">
+                              <Button color="success" type="submit" disabled={loading}>
+                                {loading ? <Spinner size="sm" /> : "ورود به سیستم"}
+                              </Button>
+                            </div>
 
-                          <Button
-                              color="success"
-                              className="w-100"
-                              type="submit"
-                              disabled={loading}
-                          >
-                            {loading ? "در حال ورود..." : "ورود"}
-                          </Button>
-
-                          <div className="mt-3 d-flex justify-content-between">
-                            <Button
-                                color="link"
-                                disabled={loading}
-                                onClick={() => {
-                                  setStep(1);
-                                  formOtp.resetForm();
-                                }}
-                            >
-                              تغییر شماره
-                            </Button>
-
-                            <Button
-                                color="link"
-                                onClick={handleResendOtp}
-                                disabled={loading}
-                            >
-                              ارسال مجدد کد
-                            </Button>
-                          </div>
-                        </Form>
-                    )}
-                  </div>
-                </CardBody>
-              </Card>
-
-              <div className="mt-5 text-center">
-                <p>© {new Date().getFullYear()} پرتال اتحادیه</p>
-              </div>
-            </Col>
-          </Row>
-        </Container>
-      </div>
+                            <div className="mt-4 text-center">
+                              {timer > 0 ? (
+                                  <p className="text-muted font-size-12">ارسال مجدد تا {timer} ثانیه دیگر</p>
+                              ) : (
+                                  <Button color="link" onClick={handleResend}>ارسال مجدد کد</Button>
+                              )}
+                            </div>
+                          </Form>
+                      )}
+                    </div>
+                  </CardBody>
+                </Card>
+              </Col>
+            </Row>
+          </Container>
+        </div>
+      </React.Fragment>
   );
 };
 

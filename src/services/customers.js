@@ -1,16 +1,34 @@
-import { apiGet, apiPost, apiPut } from "./api";
+// src/services/customers.js
+import { get, post, put, del } from "../helpers/api_helper";
 
-export function getCustomers() {
-  const token = localStorage.getItem("token");
-  return apiGet("/customers", token);
-}
+const CUSTOMER_ENDPOINT = "/customers";
 
-export function createCustomer(body) {
-  const token = localStorage.getItem("token");
-  return apiPost("/customers", body, token);
-}
+// دریافت لیست مشتریان
+export const getCustomers = async () => {
+  const response = await get(CUSTOMER_ENDPOINT);
+  return response.data;
+};
 
-export function updateCustomer(id, body) {
-  const token = localStorage.getItem("token");
-  return apiPut(`/customers/${id}`, body, token);
-}
+// دریافت جزئیات یک مشتری
+export const getCustomerDetail = async (id) => {
+  const response = await get(`${CUSTOMER_ENDPOINT}/${id}`);
+  return response.data;
+};
+
+// ایجاد مشتری جدید
+export const createCustomer = async (body) => {
+  const response = await post(CUSTOMER_ENDPOINT, body);
+  return response.data;
+};
+
+// ویرایش مشتری
+export const updateCustomer = async (id, body) => {
+  const response = await put(`${CUSTOMER_ENDPOINT}/${id}`, body);
+  return response.data;
+};
+
+// حذف مشتری
+export const deleteCustomer = async (id) => {
+  const response = await del(`${CUSTOMER_ENDPOINT}/${id}`);
+  return response;
+};

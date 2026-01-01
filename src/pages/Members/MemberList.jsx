@@ -5,310 +5,323 @@ import {
     Col,
     Card,
     CardBody,
-    Table,
     Button,
+    Table,
     Spinner,
     Alert,
-    Badge,
     Input,
+    InputGroup,
+    InputGroupText,
+    Badge // اگر از Badge استفاده نکنیم می‌توانیم حذفش کنیم، اما برای نقش‌ها هنوز لازم است
 } from "reactstrap";
 import { Link } from "react-router-dom";
-import { get, del } from "../../helpers/api_helper.jsx";
+import { supabase } from "../../helpers/supabase";
 
 const MemberList = () => {
+    // 🔹 State ها
     const [members, setMembers] = useState([]);
     const [filteredMembers, setFilteredMembers] = useState([]);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState("");
-    const [success, setSuccess] = useState("");
-    const [searchTerm, setSearchTerm] = useState("");
 
-    const loadMembers = async () => {
+    // 🔹 فیلترها
+    const [searchTerm, setSearchTerm] = useState("");
+    const [roleFilter, setRoleFilter] = useState("all");
+
+    // 🔹 دریافت لیست اعضا
+    const fetchMembers = async () => {
         setLoading(true);
         setError("");
-
-
         try {
-            const res = await get("/members"); // Payload returns {docs: [...]}
-            const list = res?.docs || [];
+            const { data, error } = await supabase
+                .from("members")
+                .select("*")
+                .order("created_at", { ascending: false });
 
-            setMembers(list);
-            setFilteredMembers(list);
+            if (error) throw error;
+
+            const dataList = data || [];
+            setMembers(dataList);
+            setFilteredMembers(dataList);
 
         } catch (err) {
-            setError("خطا در دریافت لیست اعضا");
+            console.error(err);
+            setError("خطا در دریافت لیست اعضا: " + err.message);
+        } finally {
+            setLoading(false);
         }
-
-        setLoading(false);
     };
 
     useEffect(() => {
-        loadMembers();
+        fetchMembers();
     }, []);
 
-    // 🔍 جستجو
+    // 🔹 لاجیک فیلتر و جستجو
     useEffect(() => {
-        if (searchTerm.trim() === "") {
-            setFilteredMembers(members);
-        } else {
-            const filtered = members.filter((m) => {
-                const name = (m.full_name || "").toLowerCase();
-                const code = (m.member_code || "").toLowerCase();
-                const mobile = (m.mobile || "").toLowerCase();
-                const nid = (m.national_id || "").toLowerCase();
+        let result = members;
 
-                return (
-                    name.includes(searchTerm.toLowerCase()) ||
-                    code.includes(searchTerm.toLowerCase()) ||
-                    mobile.includes(searchTerm.toLowerCase()) ||
-                    nid.includes(searchTerm.toLowerCase())
-                );
-            });
-
-            setFilteredMembers(filtered);
+        if (roleFilter !== "all") {
+            result = result.filter((m) => m.role === roleFilter);
         }
-    }, [searchTerm, members]);
 
-    // 🔥 حذف عضو
-    const handleDelete = async (id, full_name) => {
-        if (!window.confirm(`آیا از حذف "${full_name}" مطمئن هستید؟`)) return;
+        if (searchTerm.trim() !== "") {
+            const lowerTerm = searchTerm.toLowerCase();
+            result = result.filter((m) =>
+                (m.full_name && m.full_name.toLowerCase().includes(lowerTerm)) ||
+                (m.mobile && m.mobile.includes(lowerTerm)) ||
+                (m.member_code && m.member_code.includes(lowerTerm)) ||
+                (m.national_id && m.national_id.includes(lowerTerm)) ||
+                (m.business_name && m.business_name.toLowerCase().includes(lowerTerm))
+            );
+        }
 
+        setFilteredMembers(result);
+    }, [searchTerm, roleFilter, members]);
+
+
+    // 🔹 حذف عضو
+    const handleDelete = async (id, name) => {
+        if (!window.confirm(`آیا از حذف عضو "${name}" مطمئن هستید؟`)) return;
 
         try {
-            await del(`/members/${id}`);
+            const { error } = await supabase
+                .from("members")
+                .delete()
+                .eq("id", id);
 
-            setMembers((prev) => prev.filter((m) => m.id !== id));
-            setFilteredMembers((prev) => prev.filter((m) => m.id !== id));
+            if (error) throw error;
 
-            setSuccess(`عضو "${full_name}" با موفقیت حذف شد`);
-            setTimeout(() => setSuccess(""), 3000);
+            const newList = members.filter((m) => m.id !== id);
+            setMembers(newList);
+
         } catch (err) {
-            setError("خطا در حذف عضو");
+            alert("خطا در حذف: " + err.message);
         }
     };
 
-    // 🎨 Badge وضعیت
-    const getStatusBadge = (status) => {
-        switch (status) {
-            case "active":
-                return <Badge color="success" className="badge-soft-success">فعال</Badge>;
-            case "inactive":
-                return <Badge color="secondary" className="badge-soft-secondary">غیرفعال</Badge>;
-            case "pending":
-                return <Badge color="warning" className="badge-soft-warning">در حال بررسی</Badge>;
-            case "suspended":
-                return <Badge color="danger" className="badge-soft-danger">تعلیق</Badge>;
-            default:
-                return <Badge color="light">ناشناخته</Badge>;
-        }
+    // ✅ اصلاح تابع وضعیت (رنگ‌ها به صورت دستی تنظیم شدند تا خوانا باشند)
+    const renderStatus = (status) => {
+        const styles = {
+            active: {
+                bg: "rgba(52, 195, 143, 0.18)", // سبز کمرنگ
+                color: "#34c38f",               // سبز پررنگ
+                label: "فعال"
+            },
+            inactive: {
+                bg: "rgba(244, 106, 106, 0.18)", // قرمز کمرنگ
+                color: "#f46a6a",                // قرمز پررنگ
+                label: "غیرفعال"
+            },
+            pending: {
+                bg: "rgba(241, 180, 76, 0.18)",  // زرد کمرنگ
+                color: "#f1b44c",                // زرد پررنگ
+                label: "در حال بررسی"
+            },
+            suspended: {
+                bg: "rgba(80, 80, 80, 0.18)",    // خاکستری کمرنگ
+                color: "#505050",                // خاکستری پررنگ
+                label: "معلق"
+            },
+        };
+
+        const current = styles[status] || { bg: "#eff2f7", color: "#74788d", label: status };
+
+        return (
+            <span
+                className="badge rounded-pill font-size-12"
+                style={{
+                    backgroundColor: current.bg,
+                    color: current.color,
+                    padding: "5px 10px"
+                }}
+            >
+            {current.label}
+        </span>
+        );
     };
 
-    // 📅 تاریخ شمسی
-    const toPersianDate = (date) => {
-        if (!date) return "-";
-        try {
-            return new Date(date).toLocaleDateString("fa-IR");
-        } catch {
-            return "-";
-        }
+    // 🔹 نمایش نقش
+    const renderRole = (role) => {
+        const map = {
+            admin: { color: "danger", label: "مدیر کل" },
+            employee: { color: "primary", label: "کارمند" },
+            union_member: { color: "info", label: "عضو اتحادیه" },
+            union_user: { color: "secondary", label: "کاربر عادی" },
+            customer: { color: "success", label: "مشتری" },
+        };
+        const current = map[role] || { color: "light", label: role };
+        // برای نقش‌ها از همان Badge استاندارد استفاده می‌کنیم چون معمولا سفید روی رنگی است و خواناست
+        return <Badge color={current.color} className="font-size-12">{current.label}</Badge>;
     };
 
     return (
-        <React.Fragment>
-            <div className="page-content">
-                <Container fluid>
-                    {/* Breadcrumb */}
-                    <div className="page-title-box d-sm-flex align-items-center justify-content-between">
-                        <h4 className="mb-sm-0 font-size-18">لیست اعضا</h4>
+        <div className="page-content">
+            <Container fluid>
 
-                        <div className="page-title-right">
-                            <ol className="breadcrumb m-0">
-                                <li className="breadcrumb-item">
-                                    <Link to="/dashboard">داشبورد</Link>
-                                </li>
-                                <li className="breadcrumb-item active">اعضا</li>
-                            </ol>
-                        </div>
+                {/* === HEADER === */}
+                <div className="d-flex flex-column flex-md-row justify-content-between align-items-center mb-4">
+                    <h4 className="font-size-18 mb-3 mb-md-0">لیست اعضا</h4>
+
+                    <div className="d-flex gap-2">
+                        <Button color="light" onClick={fetchMembers} title="بروزرسانی">
+                            <i className={`bx bx-refresh font-size-18 ${loading ? 'bx-spin' : ''}`}></i>
+                        </Button>
+                        <Link to="/members/add" className="btn btn-success">
+                            <i className="bx bx-plus me-1"></i> افزودن عضو جدید
+                        </Link>
                     </div>
+                </div>
 
-                    <Row>
-                        <Col lg={12}>
-                            <Card>
-                                <CardBody>
-                                    {/* Header */}
-                                    <div className="d-flex flex-wrap justify-content-between align-items-center mb-4">
-                                        <div>
-                                            <h4 className="card-title mb-1">مدیریت اعضا</h4>
-                                            <p className="card-title-desc mb-0">
-                                                مشاهده، جستجو، و مدیریت اعضای اتحادیه
-                                            </p>
-                                        </div>
+                {error && <Alert color="danger" toggle={() => setError("")}>{error}</Alert>}
 
-                                        <div className="d-flex gap-2">
-                                            <Button
-                                                color="light"
-                                                onClick={loadMembers}
-                                                disabled={loading}
-                                            >
-                                                <i className="bx bx-refresh me-1" />
-                                                بروزرسانی
-                                            </Button>
+                <Row>
+                    <Col lg={12}>
+                        <Card>
+                            <CardBody>
 
-                                            <Link to="/members/add" className="btn btn-success">
-                                                <i className="bx bx-plus-circle me-1" />
-                                                افزودن عضو جدید
-                                            </Link>
-                                        </div>
+                                {/* === SEARCH & FILTER === */}
+                                <Row className="mb-4 g-3">
+                                    <Col md={4} sm={12}>
+                                        <InputGroup>
+                                            <InputGroupText className="bg-light border-end-0">
+                                                <i className="bx bx-search-alt"></i>
+                                            </InputGroupText>
+                                            <Input
+                                                type="text"
+                                                className="border-start-0"
+                                                placeholder="جستجو (نام، موبایل، کد ملی...)"
+                                                value={searchTerm}
+                                                onChange={(e) => setSearchTerm(e.target.value)}
+                                            />
+                                        </InputGroup>
+                                    </Col>
+                                    <Col md={3} sm={6}>
+                                        <Input
+                                            type="select"
+                                            value={roleFilter}
+                                            onChange={(e) => setRoleFilter(e.target.value)}
+                                        >
+                                            <option value="all">همه نقش‌ها</option>
+                                            <option value="admin">مدیر کل</option>
+                                            <option value="employee">کارمند</option>
+                                            <option value="union_member">عضو اتحادیه</option>
+                                            <option value="union_user">کاربر عادی</option>
+                                            <option value="customer">مشتری</option>
+                                        </Input>
+                                    </Col>
+                                    <Col md={5} sm={6} className="d-flex align-items-center justify-content-md-end">
+                        <span className="text-muted font-size-13">
+                            نمایش <b>{filteredMembers.length}</b> از <b>{members.length}</b> عضو
+                        </span>
+                                    </Col>
+                                </Row>
+
+                                {/* === TABLE === */}
+                                {loading ? (
+                                    <div className="text-center py-5">
+                                        <Spinner color="primary" />
+                                        <p className="mt-2 text-muted">در حال بارگذاری...</p>
                                     </div>
-
-                                    {/* Alerts */}
-                                    {error && (
-                                        <Alert color="danger" className="alert-dismissible fade show">
-                                            {error}
-                                            <button type="button" className="btn-close" onClick={() => setError("")}></button>
-                                        </Alert>
-                                    )}
-
-                                    {success && (
-                                        <Alert color="success" className="alert-dismissible fade show">
-                                            {success}
-                                            <button type="button" className="btn-close" onClick={() => setSuccess("")}></button>
-                                        </Alert>
-                                    )}
-
-                                    {/* Search */}
-                                    {!loading && members.length > 0 && (
-                                        <Row className="mb-3">
-                                            <Col md={6}>
-                                                <div className="search-box">
-                                                    <div className="position-relative">
-                                                        <Input
-                                                            type="text"
-                                                            className="form-control"
-                                                            placeholder="جستجو بر اساس نام، موبایل یا کد عضویت..."
-                                                            value={searchTerm}
-                                                            onChange={(e) => setSearchTerm(e.target.value)}
-                                                        />
-                                                        <i className="bx bx-search-alt search-icon"></i>
-                                                    </div>
-                                                </div>
-                                            </Col>
-
-                                            <Col md={6} className="text-end">
-                                                <div className="text-muted">
-                                                    تعداد کل: <strong>{members.length}</strong>
-                                                    {searchTerm && (
-                                                        <>
-                                                            {" "} | نتایج: <strong>{filteredMembers.length}</strong>
-                                                        </>
-                                                    )}
-                                                </div>
-                                            </Col>
-                                        </Row>
-                                    )}
-
-                                    {/* Table */}
-                                    {loading ? (
-                                        <div className="text-center py-5">
-                                            <Spinner color="primary" />
-                                            <h5 className="text-muted mt-3">در حال بارگذاری...</h5>
+                                ) : filteredMembers.length === 0 ? (
+                                    <div className="text-center py-5">
+                                        <div className="avatar-md mx-auto mb-3">
+                        <span className="avatar-title rounded-circle bg-light text-secondary font-size-24">
+                            <i className="bx bx-search"></i>
+                        </span>
                                         </div>
-                                    ) : members.length === 0 ? (
-                                        <div className="text-center py-5">
-                                            <h5 className="text-muted">هیچ عضوی ثبت نشده است</h5>
-                                            <Link to="/members/add" className="btn btn-success mt-2">
-                                                افزودن اولین عضو
-                                            </Link>
-                                        </div>
-                                    ) : filteredMembers.length === 0 ? (
-                                        <div className="text-center py-5">
-                                            <h5 className="text-muted">نتیجه‌ای یافت نشد</h5>
-                                            <Button color="light" onClick={() => setSearchTerm("")}>
-                                                پاک کردن جستجو
-                                            </Button>
-                                        </div>
-                                    ) : (
-                                        <div className="table-responsive">
-                                            <Table className="table table-hover table-nowrap align-middle mb-0">
-                                                <thead className="table-light">
-                                                <tr>
-                                                    <th style={{ width: "55px" }}>#</th>
-                                                    <th>نام</th>
-                                                    <th>کد عضویت</th>
-                                                    <th>موبایل</th>
-                                                    <th>کد ملی</th>
-                                                    <th>وضعیت</th>
-                                                    <th>تاریخ انقضا</th>
-                                                    <th style={{ width: "150px" }}>عملیات</th>
+                                        <h5>هیچ نتیجه‌ای یافت نشد!</h5>
+                                        <p className="text-muted">لطفاً فیلترها را تغییر دهید یا عضو جدیدی اضافه کنید.</p>
+                                    </div>
+                                ) : (
+                                    <div className="table-responsive">
+                                        <Table className="table-hover align-middle table-nowrap mb-0">
+                                            <thead className="table-light">
+                                            <tr>
+                                                <th>#</th>
+                                                <th>مشخصات عضو</th>
+                                                <th>کد عضویت</th>
+                                                <th>تماس</th>
+                                                <th>نقش</th>
+                                                <th>وضعیت</th>
+                                                <th className="text-center">عملیات</th>
+                                            </tr>
+                                            </thead>
+                                            <tbody>
+                                            {filteredMembers.map((member, index) => (
+                                                <tr key={member.id}>
+                                                    <td>{index + 1}</td>
+                                                    <td>
+                                                        <div className="d-flex align-items-center">
+                                                            {member.member_image ? (
+                                                                <img src={member.member_image} alt="" className="avatar-xs rounded-circle me-2 object-cover" />
+                                                            ) : (
+                                                                <div className="avatar-xs me-2">
+                                            <span className="avatar-title rounded-circle bg-primary bg-soft text-primary font-size-12">
+                                                {member.full_name ? member.full_name.charAt(0) : "U"}
+                                            </span>
+                                                                </div>
+                                                            )}
+                                                            <div>
+                                                                <h5 className="font-size-14 mb-1">
+                                                                    <Link to={`/members/edit/${member.id}`} className="text-dark">
+                                                                        {member.full_name}
+                                                                    </Link>
+                                                                </h5>
+                                                                {member.business_name && (
+                                                                    <small className="text-muted d-block">{member.business_name}</small>
+                                                                )}
+                                                                {member.national_id && (
+                                                                    <small className="text-muted">کد ملی: {member.national_id}</small>
+                                                                )}
+                                                            </div>
+                                                        </div>
+                                                    </td>
+                                                    <td>
+                                                        <span className="fw-bold text-primary">{member.member_code}</span>
+                                                    </td>
+                                                    <td>
+                                                        <div><i className="bx bx-mobile me-1 text-muted"></i>{member.mobile}</div>
+                                                        {member.phone && (
+                                                            <div className="font-size-11 text-muted"><i className="bx bx-phone me-1"></i>{member.phone}</div>
+                                                        )}
+                                                    </td>
+                                                    <td>{renderRole(member.role)}</td>
+                                                    <td>
+                                                        {/* استفاده از تابع اصلاح شده */}
+                                                        {renderStatus(member.member_status)}
+                                                    </td>
+                                                    <td className="text-center">
+                                                        <div className="d-flex gap-2 justify-content-center">
+                                                            <Link
+                                                                to={`/members/edit/${member.id}`}
+                                                                className="btn btn-sm btn-soft-primary"
+                                                                title="ویرایش"
+                                                            >
+                                                                <i className="bx bx-edit-alt font-size-14"></i>
+                                                            </Link>
+
+                                                            <Button
+                                                                size="sm"
+                                                                color="soft-danger"
+                                                                onClick={() => handleDelete(member.id, member.full_name)}
+                                                                title="حذف"
+                                                            >
+                                                                <i className="bx bx-trash font-size-14"></i>
+                                                            </Button>
+                                                        </div>
+                                                    </td>
                                                 </tr>
-                                                </thead>
-
-                                                <tbody>
-                                                {filteredMembers.map((member, index) => (
-                                                    <tr key={member.id}>
-                                                        <td>
-                                                            <div className="avatar-xs">
-                                                                    <span className="avatar-title rounded-circle bg-soft-primary text-primary">
-                                                                        {index + 1}
-                                                                    </span>
-                                                            </div>
-                                                        </td>
-
-                                                        <td>
-                                                            <strong>{member.full_name}</strong>
-                                                            <br />
-                                                            <small className="text-muted">
-                                                                {member.category}
-                                                            </small>
-                                                        </td>
-
-                                                        <td>
-                                                            <Badge color="info" className="badge-soft-info" pill>
-                                                                {member.member_code}
-                                                            </Badge>
-                                                        </td>
-
-                                                        <td>{member.mobile}</td>
-
-                                                        <td>{member.national_id || "-"}</td>
-
-                                                        <td>{getStatusBadge(member.member_status)}</td>
-
-                                                        <td>{toPersianDate(member.license_expire_date)}</td>
-
-                                                        <td>
-                                                            <div className="d-flex gap-2">
-                                                                <Link
-                                                                    to={`/members/edit/${member.id}`}
-                                                                    className="btn btn-sm btn-soft-primary"
-                                                                >
-                                                                    <i className="bx bx-edit"></i>
-                                                                </Link>
-
-                                                                <Button
-                                                                    color="soft-danger"
-                                                                    size="sm"
-                                                                    onClick={() =>
-                                                                        handleDelete(member.id, member.full_name)
-                                                                    }
-                                                                >
-                                                                    <i className="bx bx-trash"></i>
-                                                                </Button>
-                                                            </div>
-                                                        </td>
-                                                    </tr>
-                                                ))}
-                                                </tbody>
-                                            </Table>
-                                        </div>
-                                    )}
-                                </CardBody>
-                            </Card>
-                        </Col>
-                    </Row>
-                </Container>
-            </div>
-        </React.Fragment>
+                                            ))}
+                                            </tbody>
+                                        </Table>
+                                    </div>
+                                )}
+                            </CardBody>
+                        </Card>
+                    </Col>
+                </Row>
+            </Container>
+        </div>
     );
 };
 
